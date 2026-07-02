@@ -1,0 +1,13 @@
+*.egg-info/
+*.log
+*.pyc
+.DS_Store
+.env
+.venv/
+__pycache__/
+dist/
+neo4j-data/
+node_modules/
+postgres-data/
+redis-data/
+venv/

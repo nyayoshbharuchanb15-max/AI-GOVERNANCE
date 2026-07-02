@@ -1,0 +1,45 @@
+{
+  "name": "compliance-stack-mcp-server",
+  "version": "2.0.0",
+  "description": "Enterprise AI compliance MCP server with zero-data-egress auditing across 5 regulatory frameworks",
+  "author": "Nyayosh Bharuchanb15-Max",
+  "license": "SEE LICENSE IN LICENSE.md",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nyayoshbharuchanb15-max/ComplianceStack.git"
+  },
+  "homepage": "https://github.com/nyayoshbharuchanb15-max/ComplianceStack#readme",
+  "bugs": {
+    "url": "https://github.com/nyayoshbharuchanb15-max/ComplianceStack/issues"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "ai-governance",
+    "enterprise-compliance",
+    "ai-compliance",
+    "audit",
+    "data-privacy",
+    "regulatory-compliance",
+    "zero-data-egress",
+    "w3c-verifiable-credentials"
+  ],
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "express": "^4.19.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "@types/node": "^20.14.0",
+    "@types/express": "^4.17.21",
+    "tsx": "^4.16.0"
+  }
+}

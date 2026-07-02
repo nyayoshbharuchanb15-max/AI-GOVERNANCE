@@ -1,0 +1,137 @@
+{
+  "name": "ai-governance-mcp-server",
+  "version": "2.0.0",
+  "displayName": "AI Governance MCP Server",
+  "description": "On-premise AI compliance auditing via Model Context Protocol. Audits AI models against EU AI Act, NIST AI RMF, ISO/IEC 42001, GDPR, and India DPDP Act with a 9-phase pipeline. Issues W3C Verifiable Credentials.",
+  "author": {
+    "name": "Nyayosh Bharuchanb15-Max",
+    "url": "https://github.com/nyayoshbharuchanb15-max"
+  },
+  "license": "dual-commercial",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nyayoshbharuchanb15-max/AI-GOVERNANCE.git"
+  },
+  "homepage": "https://github.com/nyayoshbharuchanb15-max/AI-GOVERNANCE",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "ai-governance",
+    "ai-compliance",
+    "eu-ai-act",
+    "gdpr",
+    "nist-ai-rmf",
+    "iso-42001",
+    "dpdp-act",
+    "fairness",
+    "bias",
+    "audit",
+    "w3c-verifiable-credentials",
+    "ed25519",
+    "risk-classification",
+    "drift-detection",
+    "data-protection",
+    "compliance"
+  ],
+  "categories": [
+    "security",
+    "compliance",
+    "governance",
+    "ai-safety"
+  ],
+  "transports": {
+    "stdio": true,
+    "sse": true,
+    "streamable-http": false
+  },
+  "tools": [
+    {
+      "name": "classify_ai_risk",
+      "description": "EU AI Act risk tier classification (Prohibited, High, Limited, Minimal)",
+      "inputSchema": {
+        "type": "object",
+        "required": ["modelId", "modelType", "sector"]
+      }
+    },
+    {
+      "name": "discover_supply_chain",
+      "description": "Auto-discover ML models and datasets on filesystem, populate Neo4j provenance graph",
+      "inputSchema": {
+        "type": "object",
+        "required": ["modelId"]
+      }
+    },
+    {
+      "name": "audit_supply_chain",
+      "description": "Audit AI model supply chain via Neo4j provenance graph",
+      "inputSchema": {
+        "type": "object",
+        "required": ["modelId"]
+      }
+    },
+    {
+      "name": "verify_human_oversight",
+      "description": "Verify HITL and kill-switch controls (BLOCKER FAIL if missing)",
+      "inputSchema": {
+        "type": "object",
+        "required": ["modelId", "hasHumanInTheLoop", "hasKillSwitch", "deploymentContext"]
+      }
+    },
+    {
+      "name": "run_bias_assessment",
+      "description": "Fairlearn bias assessment: demographic parity, equal opportunity, disparate impact",
+      "inputSchema": {
+        "type": "object",
+        "required": ["modelId", "datasetSample", "sensitiveFeatures"]
+      }
+    },
+    {
+      "name": "generate_dpia",
+      "description": "GDPR Art. 35 DPIA with cross-border transfer analysis",
+      "inputSchema": {
+        "type": "object",
+        "required": ["modelId", "dataController", "dpoName", "processingPurpose", "dataCategories"]
+      }
+    },
+    {
+      "name": "run_adversarial_tests",
+      "description": "Adversarial robustness testing: prompt injection, jailbreak, OOD, model inversion",
+      "inputSchema": {
+        "type": "object",
+        "required": ["modelId", "testSuites"]
+      }
+    },
+    {
+      "name": "score_audit_weighted",
+      "description": "Aggregate audit phases into weighted score (0-100), BLOCKER FAIL halts certification",
+      "inputSchema": {
+        "type": "object",
+        "required": ["modelId"]
+      }
+    },
+    {
+      "name": "generate_audit_certificate",
+      "description": "Issue W3C Verifiable Credential (Ed25519-signed) for completed audit",
+      "inputSchema": {
+        "type": "object",
+        "required": ["modelId", "weightedScore", "tier", "compliant", "issuerName"]
+      }
+    },
+    {
+      "name": "monitor_model_drift",
+      "description": "Evidently AI drift detection with auto re-audit via Redis Streams",
+      "inputSchema": {
+        "type": "object",
+        "required": ["modelId", "referenceData", "productionData", "features"]
+      }
+    },
+    {
+      "name": "assess_dpdp_compliance",
+      "description": "India DPDP Act 2023 compliance assessment (Sec. 5-14)",
+      "inputSchema": {
+        "type": "object",
+        "required": ["modelId", "dataFiduciary"]
+      }
+    }
+  ]
+}

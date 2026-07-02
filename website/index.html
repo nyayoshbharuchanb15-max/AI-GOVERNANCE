@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Governance MCP - Audit Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%233b82f6'/%3E%3Ctext x='16' y='22' font-size='18' text-anchor='middle' fill='white' font-family='sans-serif'%3EA%3C/text%3E%3C/svg%3E">
+</head>
+<body>
+  <div id="toastContainer" class="toast-container"></div>
+
+  <div class="app-container">
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <h1>
+          <span class="logo-icon">A</span>
+          AI Governance
+        </h1>
+        <div class="subtitle">MCP Audit Server · 9-Phase Pipeline</div>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="nav-section">Overview</div>
+        <div class="nav-item active" data-view="dashboard">
+          <span class="nav-icon">📊</span>
+          <span class="nav-label">Dashboard</span>
+          <span class="nav-status pending"></span>
+        </div>
+
+        <div class="nav-section">Audit Phases</div>
+        <div class="nav-item" data-view="phase-1">
+          <span class="phase-num">1</span>
+          <span class="nav-label">Risk Classification</span>
+          <span class="nav-status pending"></span>
+        </div>
+        <div class="nav-item" data-view="phase-2">
+          <span class="phase-num">2</span>
+          <span class="nav-label">Supply Chain Audit</span>
+          <span class="nav-status pending"></span>
+        </div>
+        <div class="nav-item" data-view="phase-3">
+          <span class="phase-num">3</span>
+          <span class="nav-label">Human Oversight</span>
+          <span class="nav-status pending"></span>
+        </div>
+        <div class="nav-item" data-view="phase-4">
+          <span class="phase-num">4</span>
+          <span class="nav-label">Bias Assessment</span>
+          <span class="nav-status pending"></span>
+        </div>
+        <div class="nav-item" data-view="phase-5">
+          <span class="phase-num">5</span>
+          <span class="nav-label">DPIA Generation</span>
+          <span class="nav-status pending"></span>
+        </div>
+        <div class="nav-item" data-view="phase-6">
+          <span class="phase-num">6</span>
+          <span class="nav-label">Adversarial Tests</span>
+          <span class="nav-status pending"></span>
+        </div>
+        <div class="nav-item" data-view="phase-7">
+          <span class="phase-num">7</span>
+          <span class="nav-label">Weighted Scoring</span>
+          <span class="nav-status pending"></span>
+        </div>
+        <div class="nav-item" data-view="phase-8">
+          <span class="phase-num">8</span>
+          <span class="nav-label">Audit Certificate</span>
+          <span class="nav-status pending"></span>
+        </div>
+        <div class="nav-item" data-view="phase-9">
+          <span class="phase-num">9</span>
+          <span class="nav-label">Drift Monitoring</span>
+          <span class="nav-status pending"></span>
+        </div>
+
+        <div class="nav-section">Output</div>
+        <div class="nav-item" data-view="report">
+          <span class="nav-icon">📋</span>
+          <span class="nav-label">Audit Report</span>
+          <span class="nav-status pending"></span>
+        </div>
+      </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <header class="top-bar">
+        <div class="flex items-center gap-2">
+          <button id="menuToggle" class="btn btn-sm btn-outline">☰</button>
+          <h2 class="page-title" id="pageTitle">Dashboard</h2>
+        </div>
+        <div class="connection-status">
+          <span class="connection-dot" id="connectionDot"></span>
+          <span id="connectionLabel">Connecting...</span>
+        </div>
+      </header>
+
+      <div class="content-area">
+        <!-- Dashboard View -->
+        <div id="viewDashboard">
+          <!-- Stats -->
+          <div class="dashboard-grid">
+            <div class="stat-card">
+              <div class="stat-label">Phases Completed</div>
+              <div class="stat-value text-accent" id="statCompleted">0/9</div>
+              <div class="stat-detail">Total audit phases finished</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Passed</div>
+              <div class="stat-value text-success" id="statPassed">0</div>
+              <div class="stat-detail">Compliant phases</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Failed / Blocked</div>
+              <div class="stat-value text-danger" id="statFailed">0</div>
+              <div class="stat-detail">Non-compliant phases</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Audit Progress</div>
+              <div class="stat-value" id="statProgress">0%</div>
+              <div class="stat-detail">Overall completion</div>
+            </div>
+          </div>
+
+          <!-- Progress Bar -->
+          <div class="progress-container">
+            <div class="progress-bar-bg">
+              <div class="progress-bar-fill" id="dashboardProgressFill" style="width:0%"></div>
+            </div>
+            <div class="progress-label">
+              <span>Audit Pipeline Progress</span>
+              <span id="progressPct">0%</span>
+            </div>
+          </div>
+
+          <!-- Phase Grid -->
+          <div class="phase-grid" id="phaseGrid"></div>
+
+          <!-- Report Button -->
+          <div class="text-center mt-6" id="reportBtnWrap"></div>
+        </div>
+
+        <!-- Phase Form View -->
+        <div id="viewPhase" class="hidden">
+          <div class="card" id="phaseFormCard"></div>
+        </div>
+
+        <!-- Report View -->
+        <div id="viewReport" class="hidden">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">📋 Consolidated Audit Report</div>
+                <div class="card-subtitle">Complete 9-phase AI governance audit · EU AI Act · NIST AI RMF · ISO 42001 · GDPR</div>
+              </div>
+              <div class="card-actions">
+                <button class="btn btn-outline btn-sm" onclick="navigate('dashboard')">← Dashboard</button>
+                <button class="btn btn-primary btn-sm" onclick="window.print()">🖨️ Print</button>
+              </div>
+            </div>
+            <div id="reportContent"></div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

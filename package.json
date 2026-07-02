@@ -1,0 +1,17 @@
+{
+  "name": "ai-governance-mcp-server",
+  "version": "2.0.0",
+  "private": true,
+  "description": "AI Governance MCP Server — On-premise enterprise compliance auditing for AI models",
+  "author": "Nyayosh Bharuchanb15-Max",
+  "license": "SEE LICENSE IN LICENSE.md",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nyayoshbharuchanb15-max/AI-GOVERNANCE.git"
+  },
+  "homepage": "https://github.com/nyayoshbharuchanb15-max/AI-GOVERNANCE#readme",
+  "bugs": {
+    "url": "https://github.com/nyayoshbharuchanb15-max/AI-GOVERNANCE/issues"
+  },
+  "workspaces": ["mcp-server"]
+}
