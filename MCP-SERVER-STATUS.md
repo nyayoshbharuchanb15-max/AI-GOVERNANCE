@@ -1,10 +1,10 @@
 // ┌─────────────────────────────────────────────────────────────┐
-// │  AI Governance MCP Server — Status Report                   │
+// │  ComplianceStack MCP Server — Status Report                 │
 // └─────────────────────────────────────────────────────────────┘
 
 ## Overview
 
-The AI Governance MCP Server is a **complete, functional TypeScript implementation** that exposes 17 audit tools via the Model Context Protocol SDK. It successfully proxies all audit requests to the Python FastAPI backend.
+The ComplianceStack MCP Server is a **complete, functional TypeScript implementation** that exposes 17 audit tools via the Model Context Protocol SDK. It successfully proxies all audit requests to the Python FastAPI backend.
 
 ## Current Status: ✅ TESTED & WORKING
 
