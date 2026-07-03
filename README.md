@@ -1,30 +1,80 @@
-# ComplianceStack — AI Governance Platform
+<div align="center">
 
-**Enterprise-grade AI compliance and governance platform with zero-data-egress auditing with zero-data-egress auditing** — EU AI Act, NIST AI RMF, ISO/IEC 42001, GDPR, India DPDP Act
+# ComplianceStack
+
+### Enterprise AI Governance — Zero-Data-Egress Compliance Auditing
+
+**The first open-source MCP server that audits AI models against 5 regulatory frameworks in real-time.**
 
 [![CI](https://github.com/nyayoshbharuchanb15-max/ComplianceStack/actions/workflows/ci.yml/badge.svg)](https://github.com/nyayoshbharuchanb15-max/ComplianceStack/actions)
 [![License](https://img.shields.io/badge/license-dual--commercial-blue)](./LICENSE.md)
 [![MCP Compatible](https://img.shields.io/badge/MCP-compatible-green)](https://modelcontextprotocol.io)
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue)](https://python.org)
 [![Node 20](https://img.shields.io/badge/node-20-green)](https://nodejs.org)
+[![EU AI Act](https://img.shields.io/badge/EU%20AI%20Act-compliant-red)](https://artificialintelligenceact.eu/)
+[![GDPR](https://img.shields.io/badge/GDPR-compliant-blue)](https://gdpr.eu/)
+[![ISO 42001](https://img.shields.io/badge/ISO%2FIEC%2042001-compliant-purple)](https://www.iso.org/standard/81230.html)
+
+[Getting Started](#-quick-start) | [Features](#-features) | [API Reference](#-api-reference) | [Contributing](./CONTRIBUTING.md)
+
+</div>
 
 ---
 
-## What This Is
+## Why ComplianceStack?
 
-An **enterprise-grade AI governance platform** that provides zero-data-egress compliance auditing for AI models across 5 regulatory frameworks. Integrates with any MCP-compatible AI assistant (Claude Desktop, Cursor, Windsurf, etc.) and executes a comprehensive 17-phase audit pipeline with BLOCKER FAIL protection.
+> **AI regulation is here.** The EU AI Act became law in August 2024. GDPR fines exceeded €2 billion in 2024. India's DPDP Act is being enforced. Your AI models need compliance auditing — and you need it to be fast, private, and auditable.
 
-## Regulatory Coverage
+ComplianceStack is a **17-phase audit pipeline** that plugs directly into your AI assistant (Claude Desktop, Cursor, Windsurf) via the Model Context Protocol. Every audit runs **entirely on-premise** with zero data leaving your infrastructure.
 
-| Framework | Articles/Clauses | Status |
-|-----------|-----------------|--------|
-| **EU AI Act** (Reg. 2024/1689) | Art. 5, 6, 10, 12, 14, 15, Annex I–III | Implemented |
-| **NIST AI RMF** (AI 100-1) | MAP 1.1, GOVERN 1.2, GOVERN 3.2, MEASURE 1.3, 2.2, 3.3, 4.1 | Implemented |
-| **ISO/IEC 42001:2023** | Clauses 6.1, 6.2, 7.4.3, 7.5, 8.1.2, 8.1.3, 8.2, 9.1 | Implemented |
-| **GDPR** (Reg. 2016/679) | Art. 5, 9, 22, 25, 30, 35, 44–49 | Implemented |
-| **India DPDP Act 2023** | Sec. 5–14 (Consent, Fiduciary, Processor, Principal rights) | Implemented |
+### Key Differentiators
 
-## Architecture
+| Feature | ComplianceStack | Traditional GRC Tools |
+|---------|----------------|----------------------|
+| **MCP Integration** | Native — works with Claude, Cursor, Windsurf | Requires separate API integration |
+| **Zero Data Egress** | All operations in-process | Cloud-dependent |
+| **Real-time Auditing** | Instant feedback in your IDE | Batch processing |
+| **17-Phase Pipeline** | Risk, Bias, DPIA, Drift, Agent Trust, and more | Typically 3-5 checks |
+| **W3C Verifiable Credentials** | Cryptographically signed audit certificates | PDF reports |
+| **BLOCKER FAIL** | Prevents certification of non-compliant models | Manual review |
+| **Open Source** | Full codebase, self-hostable | Proprietary SaaS |
+
+---
+
+## Features
+
+### Regulatory Coverage
+
+| Framework | Articles/Clauses | What We Audit |
+|-----------|-----------------|---------------|
+| **EU AI Act** (Reg. 2024/1689) | Art. 5, 6, 10, 12, 14, 15, Annex I–III | Risk classification, supply chain, human oversight, bias, adversarial robustness |
+| **NIST AI RMF** (AI 100-1) | MAP 1.1, GOVERN 1.2, 3.2, MEASURE 1.3, 2.2, 3.3, 4.1 | Risk mapping, governance, measurement, drift monitoring |
+| **ISO/IEC 42001:2023** | Clauses 6.1, 6.2, 7.4.3, 7.5, 8.1.2, 8.1.3, 8.2, 9.1 | AIMS compliance, documented information, monitoring |
+| **GDPR** (Reg. 2016/679) | Art. 5, 9, 22, 25, 30, 35, 44–49 | DPIA, ROPA, DSAR, cross-border transfers |
+| **India DPDP Act 2023** | Sec. 5–14 | Consent, fiduciary duties, data principal rights |
+
+### 17-Phase Audit Pipeline
+
+| Phase | Tool | What It Does |
+|-------|------|-------------|
+| 1 | `classify_ai_risk` | EU AI Act risk tier classification (Prohibited → Minimal) |
+| 2 | `discover_supply_chain` | Filesystem crawler populates Neo4j provenance graph |
+| 3 | `audit_supply_chain` | Neo4j graph query for data lineage & IP clearance |
+| 4 | `verify_human_oversight` | HITL/kill-switch verification (BLOCKER FAIL if missing) |
+| 5 | `run_bias_assessment` | Fairlearn metrics: demographic parity, equal opportunity, disparate impact |
+| 6 | `generate_dpia` | GDPR Art. 35 DPIA with cross-border transfer analysis |
+| 7 | `run_adversarial_tests` | Prompt injection, jailbreak, OOD, model inversion, membership inference |
+| 8 | `score_audit_weighted` | Aggregate score (0–100), BLOCKER FAIL halts certification |
+| 9 | `generate_audit_certificate` | W3C Verifiable Credential (Ed25519-signed) issued |
+| 10 | `monitor_model_drift` | Evidently AI drift detection, auto re-audit via Redis Streams |
+| 11 | `audit_session_memory` | STM/LTM isolation, context window limits, wipe-on-expiry |
+| 12 | `audit_rag_quality` | Retrieval accuracy, embedding bias, freshness, hallucination rate |
+| 13 | `audit_prompt_templates` | Injection surface, few-shot bias, instruction safety |
+| 14 | `audit_agent_trust` | Agent identity, P2P integrity, collusion detection |
+| 15 | `audit_tool_permissions` | Privilege escalation, unauthorized access, permission drift |
+| 16 | `classify_agent_autonomy` | Assistive → Fully Autonomous classification (BLOCKER if uncontrolled) |
+
+### Architecture
 
 ```
 ┌──────────────────────┐     ┌──────────────────────────────────────────────┐
@@ -36,7 +86,6 @@ An **enterprise-grade AI governance platform** that provides zero-data-egress co
 │                      │     │  │ (Risk, Bias,      │     │ (Audit Logic)  │  │
 │                      │     │  │  DPIA, Drift...)  │     │               │  │
 │                      │     │  └──────────────────┘     └───────┬───────┘  │
-│                      │     │         │                         │          │
 │  ┌────────────────┐  │     └─────────┼─────────────────────────┼──────────┘
 │  │  OAuth 2.1 +   │  │               │                         │
 │  │  RBAC          │  │  ┌────────────┼─────────────────────────┼──────────┐
@@ -52,26 +101,7 @@ An **enterprise-grade AI governance platform** that provides zero-data-egress co
 └──────────────────────┘
 ```
 
-## 17-Phase Audit Pipeline
-
-| Phase | Tool | What It Does | Regulatory Mapping |
-|-------|------|-------------|-------------------|
-| 1 | `classify_ai_risk` | EU AI Act risk tier classification (Prohibited → Minimal) | Art. 6, Annex I–III |
-| 2 | `discover_supply_chain` | Filesystem crawler populates Neo4j provenance graph | Art. 10, ISO 7.4.3 |
-| 3 | `audit_supply_chain` | Neo4j graph query for data lineage & IP clearance | Art. 10, 12 |
-| 4 | `verify_human_oversight` | HITL/kill-switch verification (BLOCKER FAIL if missing) | Art. 14, GDPR Art. 22 |
-| 5 | `run_bias_assessment` | Fairlearn metrics: demographic parity, equal opportunity, disparate impact | Art. 10, GDPR Art. 9, 35 |
-| 6 | `generate_dpia` | GDPR Art. 35 DPIA with cross-border transfer analysis | Art. 5, 9, 22, 35, 44–49 |
-| 7 | `run_adversarial_tests` | Prompt injection, jailbreak, OOD, model inversion, membership inference | Art. 15 |
-| 8 | `score_audit_weighted` | Aggregate score (0–100), BLOCKER FAIL halts certification | NIST MEASURE 4.1 |
-| 9 | `generate_audit_certificate` | W3C Verifiable Credential (Ed25519-signed) issued | W3C VC 1.1, ISO 7.5 |
-| 10 | `monitor_model_drift` | Evidently AI drift detection, auto re-audit via Redis Streams | Art. 15, ISO 9.1 |
-| 11 | `audit_session_memory` | STM/LTM isolation, context window limits, wipe-on-expiry | GDPR Art. 5(1)(f), DPDP Sec. 8 |
-| 12 | `audit_rag_quality` | Retrieval accuracy, embedding bias, freshness, hallucination rate | Art. 15, NIST MEASURE 3.3 |
-| 13 | `audit_prompt_templates` | Injection surface, few-shot bias, instruction safety | Art. 10, 13, NIST GOVERN 1.2 |
-| 14 | `audit_agent_trust` | Agent identity, P2P integrity, collusion detection | Art. 12, 14, DPDP Sec. 8 |
-| 15 | `audit_tool_permissions` | Privilege escalation, unauthorized access, permission drift | DPDP Sec. 8, GDPR Art. 25 |
-| 16 | `classify_agent_autonomy` | Assistive → Fully Autonomous classification (BLOCKER if uncontrolled) | Art. 6, 14, NIST GOVERN 3.2 |
+---
 
 ## Quick Start
 
@@ -126,23 +156,23 @@ Add to `claude_desktop_config.json`:
 }
 ```
 
-#### MCP Inspector (Testing)
-
-```bash
-npx @modelcontextprotocol/inspector http://localhost:3000/sse
-```
-
-### 4. Run an Audit
+### 4. Run Your First Audit
 
 Ask your AI assistant:
 
-```
-"Run a full 9-phase audit on model 'my-model-v1'. 
- Classify it as a general-purpose AI used in employment 
- with profiling capabilities, no kill-switch, 
- sensitive features: ['race', 'gender', 'age'], 
- data controller: 'Acme Corp', DPO: 'Jane Doe'."
-```
+> "Run a full audit on model 'my-model-v1'. Classify it as a general-purpose AI used in employment with profiling capabilities, no kill-switch, sensitive features: race, gender, age. Data controller: Acme Corp, DPO: Jane Doe."
+
+**What happens:**
+1. Risk classification → **HIGH-RISK** (employment + profiling)
+2. Supply chain audit → IP clearance check
+3. Human oversight → **BLOCKER FAIL** (no kill-switch)
+4. Bias assessment → Demographic parity across 3 features
+5. DPIA generation → GDPR Art. 35 compliance
+6. Adversarial testing → Prompt injection + jailbreak
+7. Weighted score → **CERTIFICATION HALTED** (blocker detected)
+8. Remediation guidance → Specific steps to fix
+
+---
 
 ## API Reference
 
@@ -172,7 +202,7 @@ Ask your AI assistant:
 | POST | `/api/tool-permissions/evaluate` | Tool permission boundary audit |
 | POST | `/api/agent-autonomy/classify` | Agent autonomy classification |
 
-## MCP Tools
+### MCP Tools
 
 | Tool | Parameters | Returns |
 |------|-----------|---------|
@@ -194,9 +224,11 @@ Ask your AI assistant:
 | `audit_tool_permissions` | `modelId`, `toolRegistry`, `accessLogs` | Permission boundary report |
 | `classify_agent_autonomy` | `modelId`, `agentType`, `hasHumanOversight`, `canMakeDecisions` | Autonomy classification |
 
+---
+
 ## W3C Verifiable Credentials
 
-Audit certificates are issued as W3C VCs with Ed25519 cryptographic proof:
+Audit certificates are issued as **W3C VCs with Ed25519 cryptographic proof**:
 
 ```json
 {
@@ -214,14 +246,20 @@ Audit certificates are issued as W3C VCs with Ed25519 cryptographic proof:
 }
 ```
 
+---
+
 ## Security
 
-- **Zero data egress** — all operations in-process, no external API calls
-- **OAuth 2.1 + RBAC** — admin, auditor, viewer roles with scoped endpoints
-- **PII redaction** — middleware intercepts and redacts PII from all API responses
-- **Ed25519 signing** — keys never leave the container
-- **Merkle audit trail** — tamper-evident evidence chain
-- **On-premise only** — no telemetry, no external dependencies
+| Feature | Description |
+|---------|-------------|
+| **Zero Data Egress** | All operations in-process, no external API calls |
+| **OAuth 2.1 + RBAC** | Admin, auditor, viewer roles with scoped endpoints |
+| **PII Redaction** | Middleware intercepts and redacts PII from all API responses |
+| **Ed25519 Signing** | Keys never leave the container |
+| **Merkle Audit Trail** | Tamper-evident evidence chain |
+| **On-Premise Only** | No telemetry, no external dependencies |
+
+---
 
 ## Development
 
@@ -239,8 +277,15 @@ npm run dev
 
 # Tests
 cd python-backend && pytest tests/
-cd mcp-server && npm test
 ```
+
+---
+
+## Contributing
+
+We welcome contributions! See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
+
+---
 
 ## License
 
@@ -254,8 +299,12 @@ cd mcp-server && npm test
 
 See [LICENSE.md](./LICENSE.md) for complete terms.
 
-### Intellectual Property
+---
 
-All code, documentation, trademarks ("ComplianceStack"), and associated
-IP are the exclusive property of the copyright holder. Contributions are accepted
-under the terms of the [Developer Certificate of Origin](./CONTRIBUTING.md).
+<div align="center">
+
+**Built with care for the AI governance community.**
+
+[GitHub](https://github.com/nyayoshbharuchanb15-max/ComplianceStack) | [Issues](https://github.com/nyayoshbharuchanb15-max/ComplianceStack/issues)
+
+</div>

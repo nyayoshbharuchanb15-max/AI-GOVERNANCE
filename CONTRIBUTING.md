@@ -1,110 +1,237 @@
-# Contributing to AI Governance MCP Server
+# Contributing to ComplianceStack
 
-Thank you for considering contributing. By submitting any contribution
-(code, documentation, feedback), you agree to the following terms designed
-to protect the intellectual property of the project.
+Thank you for your interest in contributing to ComplianceStack! This document provides guidelines and information for contributors.
 
-## Developer Certificate of Origin (DCO)
+## Table of Contents
 
-To maintain legal integrity and protect the project's IP, every contributor
-must certify that they have the right to submit their contribution under
-the project's license terms.
+- [Code of Conduct](#code-of-conduct)
+- [Getting Started](#getting-started)
+- [Development Setup](#development-setup)
+- [How to Contribute](#how-to-contribute)
+- [Pull Request Process](#pull-request-process)
+- [Coding Standards](#coding-standards)
+- [Testing](#testing)
+- [Documentation](#documentation)
+- [Community](#community)
 
-By making a contribution, you certify:
+## Code of Conduct
 
-1. The contribution was created in whole or in part by you, and you have
-   the right to submit it under the project's license; OR
-2. The contribution is based upon previous work that you have the right
-   to submit under the project's license; OR
-3. The contribution was provided directly to you by someone who certified
-   (1) or (2), and you have not modified it.
+This project and everyone participating in it is governed by our [Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code.
 
-You understand that your contribution:
-- Becomes part of a project that uses a **dual-licensing model** (see LICENSE.md)
-- Does NOT grant you any ownership or patent rights to the project
-- May be used commercially under the terms of the Commercial License
+## Getting Started
 
-### Signing Off
+### Prerequisites
 
-All commit messages must include a `Signed-off-by` line:
+- **Docker 24+** and **Docker Compose v2**
+- **Python 3.12** (for backend development)
+- **Node.js 20+** (for MCP server development)
+- **Git**
 
-```
-Signed-off-by: Your Name <your.email@example.com>
-```
+### Development Setup
 
-This can be added automatically with:
-```bash
-git commit -s -m "Your commit message"
-```
+1. **Fork the repository**
+   ```bash
+   # Fork on GitHub, then clone
+   git clone https://github.com/YOUR_USERNAME/ComplianceStack.git
+   cd ComplianceStack
+   ```
 
-## Contributor License Agreement (CLA)
+2. **Start the development environment**
+   ```bash
+   cp .env.example .env
+   docker compose up --build -d
+   ```
 
-If your contribution is significant (new features, substantial code changes),
-you may be asked to sign a formal Contributor License Agreement that:
-- Grants the project owner the right to use your contribution commercially
-- Confirms you have the right to submit the work
-- Does not affect your ownership of the original work
+3. **Verify services are running**
+   ```bash
+   curl http://localhost:8000/health
+   ```
 
-## Our Standards
-
-- Write clear, commented code
-- Include regulatory mapping comments for compliance features
-- Test your changes
-- Keep documentation updated
-
-## macOS Development Notes
-
-### Building the `cryptography` wheel
-
-The `cryptography` package requires Rust and OpenSSL development headers
-to build from source. On macOS, this often fails with:
-
-```
-error: can't find Rust compiler
-```
-
-**Solution — install Rust via rustup:**
-
-```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-source "$HOME/.cargo/env"
-```
-
-If you still see OpenSSL header errors, install OpenSSL via Homebrew:
-
-```bash
-brew install openssl
-export LDFLAGS="-L/opt/homebrew/opt/openssl/lib"
-export CPPFLAGS="-I/opt/homebrew/opt/openssl/include"
-```
-
-Then re-run `pip install -r requirements.txt`.
-
-### Pre-built wheels (alternative)
-
-Install a pre-built `cryptography` wheel to avoid the Rust build:
-
-```bash
-pip install cryptography --only-binary=:all:
-```
-
-If your Python version is not available as a pre-built wheel, upgrade
-Python via Homebrew: `brew install python@3.12`.
-
-### Running without a database
-
-The server starts and serves the `/health` endpoint even when PostgreSQL,
-Neo4j, or Redis are unavailable (graceful degradation). Dependencies are
-probed at runtime and reported in the health response.
-
-Alembic migrations are provided in `python-backend/alembic/`. Run them
-against a live database with:
+### Backend Development
 
 ```bash
 cd python-backend
-ALEMBIC_DATABASE_URL="postgresql+asyncpg://user:pass@host:5432/db" alembic upgrade head
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+
+# Run tests
+pytest tests/ -v
+
+# Run linting
+ruff check .
+
+# Run type checking
+mypy .
 ```
+
+### MCP Server Development
+
+```bash
+cd mcp-server
+npm install
+
+# Build
+npm run build
+
+# Development mode (with hot reload)
+npm run dev
+
+# Type checking
+npm run typecheck
+```
+
+## How to Contribute
+
+### Reporting Bugs
+
+Before creating bug reports, please check the issue list as you might find out that you don't need to create one. When you are creating a bug report, please include as many details as possible:
+
+- **Use a clear and descriptive title**
+- **Describe the exact steps to reproduce the problem**
+- **Describe the behavior you observed after following the steps**
+- **Explain which behavior you expected to see instead and why**
+- **Include screenshots if possible**
+
+### Suggesting Enhancements
+
+Enhancement suggestions are tracked as GitHub issues. When creating an enhancement suggestion:
+
+- **Use a clear and descriptive title**
+- **Provide a step-by-step description of the suggested enhancement**
+- **Explain why this enhancement would be useful**
+- **Include examples of how the enhancement would work**
+
+### Contributing Code
+
+1. **Create a feature branch** from `main`
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
+
+2. **Make your changes**
+   - Follow the coding standards below
+   - Add tests for new functionality
+   - Update documentation as needed
+
+3. **Commit your changes**
+   ```bash
+   git commit -m "feat: add new feature description"
+   ```
+
+4. **Push to your fork**
+   ```bash
+   git push origin feature/your-feature-name
+   ```
+
+5. **Create a Pull Request**
+
+## Pull Request Process
+
+1. **Update the README.md** with details of changes if applicable
+2. **Update the CHANGELOG.md** with a new entry under "Unreleased"
+3. **Ensure all tests pass** (`pytest tests/` for Python, `npm test` for MCP server)
+4. **Ensure code passes linting** (`ruff check .` for Python)
+5. **Request review** from maintainers
+
+### PR Title Convention
+
+Use [Conventional Commits](https://www.conventionalcommits.org/) format:
+
+- `feat:` - New feature
+- `fix:` - Bug fix
+- `docs:` - Documentation changes
+- `style:` - Code style changes (formatting, missing semi-colons, etc.)
+- `refactor:` - Code refactoring
+- `test:` - Adding or updating tests
+- `chore:` - Maintenance tasks
+
+Examples:
+- `feat: add bias assessment for protected attributes`
+- `fix: resolve MCP server connection timeout`
+- `docs: update API reference for DPIA endpoint`
+
+## Coding Standards
+
+### Python
+
+- Follow [PEP 8](https://peps.python.org/pep-0008/) style guide
+- Use type hints for all function parameters and return values
+- Write docstrings for all public functions and classes
+- Keep functions focused and small (under 50 lines when possible)
+- Use meaningful variable and function names
+
+### TypeScript
+
+- Follow the [TypeScript Style Guide](https://typescript-eslint.io/)
+- Use strict TypeScript configuration
+- Write JSDoc comments for complex functions
+- Prefer `interface` over `type` for object shapes
+- Use async/await over raw promises
+
+### General
+
+- Write self-documenting code with clear naming
+- Add comments for complex logic
+- Keep functions focused on a single responsibility
+- Write tests for new functionality
+- Update documentation when changing APIs
+
+## Testing
+
+### Python Backend
+
+```bash
+cd python-backend
+
+# Run all tests
+pytest tests/ -v
+
+# Run specific test file
+pytest tests/test_bias.py -v
+
+# Run with coverage
+pytest tests/ --cov=.
+```
+
+### MCP Server
+
+```bash
+cd mcp-server
+
+# Run build
+npm run build
+
+# Type check
+npm run typecheck
+```
+
+### Integration Tests
+
+```bash
+# Start all services
+docker compose up --build -d
+
+# Run integration tests
+pytest tests/ -m integration
+```
+
+## Documentation
+
+- Update README.md for new features or API changes
+- Add docstrings to all new functions and classes
+- Update API documentation for new endpoints
+- Include examples in documentation
+- Keep CHANGELOG.md updated
+
+## Community
+
+- **GitHub Issues**: For bug reports and feature requests
+- **GitHub Discussions**: For questions and general discussion
+- **Pull Requests**: For code contributions
 
 ## Questions?
 
-Open an issue at https://github.com/nyayoshbharuchanb15-max/AI-GOVERNANCE
+If you have questions about contributing, please open a GitHub issue with the label "question".
+
+Thank you for contributing to ComplianceStack! 🎉
