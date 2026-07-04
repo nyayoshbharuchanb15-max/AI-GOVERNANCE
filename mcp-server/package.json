@@ -1,12 +1,13 @@
 {
   "name": "compliance-stack-mcp-server",
   "version": "3.1.0",
-  "description": "Enterprise AI compliance MCP server with zero-data-egress auditing across 5 regulatory frameworks. Supports stdio, SSE, and Streamable HTTP transports. Exposes 17 tools, 5 resources, and 4 prompts.",
+  "description": "Enterprise AI compliance MCP server with zero-data-egress auditing across 5 regulatory frameworks (EU AI Act, GDPR, NIST AI RMF, ISO 42001, India DPDP). Exposes 17 tools, 5 resources, and 4 prompts via stdio/SSE/Streamable HTTP.",
   "author": "Nyayosh Bharuchanb15-Max",
   "license": "SEE LICENSE IN LICENSE.md",
   "repository": {
     "type": "git",
-    "url": "https://github.com/nyayoshbharuchanb15-max/ComplianceStack.git"
+    "url": "https://github.com/nyayoshbharuchanb15-max/ComplianceStack.git",
+    "directory": "mcp-server"
   },
   "homepage": "https://github.com/nyayoshbharuchanb15-max/ComplianceStack#readme",
   "bugs": {
@@ -18,16 +19,40 @@
     "ai-governance",
     "enterprise-compliance",
     "ai-compliance",
+    "eu-ai-act",
+    "gdpr",
+    "iso-42001",
+    "nist-ai-rmf",
+    "dpdp",
     "audit",
     "data-privacy",
     "regulatory-compliance",
     "zero-data-egress",
-    "w3c-verifiable-credentials"
+    "w3c-verifiable-credentials",
+    "bias-detection",
+    "dpia",
+    "ropa",
+    "dsar",
+    "adversarial-testing",
+    "drift-detection"
   ],
   "type": "module",
   "main": "dist/index.js",
+  "bin": {
+    "compliance-stack-mcp-server": "dist/index.js"
+  },
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "dist/**/*.js.map",
+    "dist/**/*.d.ts.map"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "build": "tsc",
+    "prepublishOnly": "npm run build",
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
     "typecheck": "tsc --noEmit",

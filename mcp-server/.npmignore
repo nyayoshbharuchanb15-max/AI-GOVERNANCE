@@ -1,0 +1,12 @@
+src/
+__tests__/
+*.test.ts
+*.spec.ts
+vitest.config.*
+tsconfig.json
+.git/
+.github/
+node_modules/
+.env*
+README.md
+LICENSE.md

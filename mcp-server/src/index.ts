@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 // ═══════════════════════════════════════════════════════════════════
 //  ComplianceStack MCP Server — Complete Implementation v3.1.0
 //  Exposes 17 audit tools, 5 resources, and 4 prompts via the
