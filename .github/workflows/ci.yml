@@ -139,9 +139,4 @@ jobs:
             --tag compliancestack/python-backend:latest \
             --file ./python-backend/Dockerfile ./python-backend/
           
-          # Tag and push root Docker image
-          docker buildx build --platform linux/amd64 --push \
-            --tag compliancestack:latest \
-            --tag compliancestack:${{ github.sha }} .
-          
           echo "✅ ComplianceStack images pushed successfully"
