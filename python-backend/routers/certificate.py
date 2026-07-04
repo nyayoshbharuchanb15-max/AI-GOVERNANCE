@@ -14,7 +14,6 @@ retained, protected, and retrievable.
 W3C VC Data Model 1.1 — Standard for decentralized verifiable data.
 """
 
-from __future__ import annotations
 import json
 import uuid
 from datetime import datetime, timezone

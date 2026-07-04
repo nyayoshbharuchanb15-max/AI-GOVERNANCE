@@ -110,8 +110,8 @@ class VCIssuer:
                 datetime.now(timezone.utc) + timedelta(days=valid_days)
             ).isoformat(),
             credentialSubject=subject_data,
+            proof=VCProof(verificationMethod=verification_method or self.issuer_id),
         )
-        vc.proof.verificationMethod = verification_method or self.issuer_id
         vc.proof.proofValue = proof_value
         vc.proof.created = datetime.now(timezone.utc).isoformat()
         return vc

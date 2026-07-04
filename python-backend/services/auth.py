@@ -311,12 +311,18 @@ def require_scope(required_scope: Scope):
     def decorator(func: Callable):
         @wraps(func)
         async def wrapper(*args, **kwargs):
-            request = kwargs.get("request") or kwargs.get("request_obj")
+            request = None
+            for candidate in [kwargs.get("request_obj"), kwargs.get("request")]:
+                if isinstance(candidate, Request):
+                    request = candidate
+                    break
             if request is None:
                 for arg in args:
                     if isinstance(arg, Request):
                         request = arg
                         break
+            if request is None:
+                request = kwargs.get("request_obj") or kwargs.get("request")
             if request is None:
                 raise HTTPException(status_code=500, detail="Request object not found")
 

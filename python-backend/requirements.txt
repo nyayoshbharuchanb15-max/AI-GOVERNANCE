@@ -35,6 +35,7 @@ pyjwt==2.8.0
 
 # Password hashing (production auth)
 passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
 
 # Adversarial Testing — real LLM API calls + LLM-as-judge + embedding OOD
 # sentence-transformers is optional; OOD falls back to char-entropy

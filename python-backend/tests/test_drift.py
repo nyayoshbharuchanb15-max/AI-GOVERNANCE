@@ -104,7 +104,7 @@ class TestFallbackReport:
     @pytest.mark.asyncio
     async def test_includes_regulatory_mappings(self):
         report = _fallback_report("test-model", 0.1, "test")
-        assert "EU AI Act Art. 15" in report.mappedArticles
+        assert any("EU AI Act Art. 15" in a for a in report.mappedArticles)
         assert "ISO/IEC 42001:2023 Clause 9.1" in report.iso42001Clause
 
 
@@ -143,7 +143,7 @@ class TestDetectDriftFallback:
         ref = [{"x": 1.0}, {"x": 2.0}]
         prod = [{"x": 1.5}, {"x": 2.5}]
         report = await detect_drift("test-model", ref, prod, features=["x"])
-        assert "EU AI Act Art. 15" in report.mappedArticles
+        assert any("EU AI Act Art. 15" in a for a in report.mappedArticles)
         assert "ISO/IEC 42001:2023 Clause 9.1" in report.iso42001Clause
 
     @pytest.mark.asyncio

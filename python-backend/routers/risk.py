@@ -118,7 +118,7 @@ def _build_rationale(tier: RiskTier, request: ClassifyRiskRequest) -> str:
         return (
             f"Model '{request.modelId}' is classified as HIGH-RISK under EU AI Act Art. 6(2) "
             f"and Annex III. Reason: {sector_reason}. "
-            f"Full conformity assessment is required before deployment."
+            f"Full Conformity assessment is required before deployment."
         )
     elif tier == RiskTier.limited:
         return (

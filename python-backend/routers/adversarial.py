@@ -12,7 +12,6 @@ levels of accuracy, robustness, and cybersecurity.
 ISO/IEC 42001:2023 Clause 8.1.3 — Security and robustness controls.
 """
 
-from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request

@@ -72,6 +72,7 @@ async def app() -> AsyncGenerator:
     from fastapi.middleware.trustedhost import TrustedHostMiddleware
     from services.auth import auth_middleware
     from routers.auth import router as auth_router
+    from routers.risk import router as risk_router
 
     test_app = FastAPI(title="Test AI Governance API", version="0.0.0")
 
@@ -81,6 +82,7 @@ async def app() -> AsyncGenerator:
     test_app.middleware("http")(auth_middleware)
 
     test_app.include_router(auth_router)
+    test_app.include_router(risk_router)
 
     return test_app
 
@@ -101,9 +103,12 @@ def patch_redis(monkeypatch):
     async def exists_false(*args, **kwargs):
         return 0
 
+    async def is_not_blacklisted(jti: str) -> bool:
+        return False
+
     monkeypatch.setattr("routers.auth._redis", lambda: None)
     monkeypatch.setattr("routers.auth._blacklist_jti", noop_redis)
-    monkeypatch.setattr("routers.auth._is_jti_blacklisted", lambda jti: False)
+    monkeypatch.setattr("routers.auth._is_jti_blacklisted", is_not_blacklisted)
     monkeypatch.setattr("routers.auth._store_session", noop_redis)
     monkeypatch.setattr("routers.auth._delete_session", noop_redis)
 
@@ -132,18 +137,20 @@ def patch_user_store(monkeypatch):
             return {k: v for k, v in user.items() if k != "password_hash"}
         return None
 
+    _auth_codes = {}
+
     async def mock_store_auth_code(code, client_id, code_challenge,
                                     code_challenge_method, redirect_uri,
                                     scope, auth_user):
-        pass
+        _auth_codes[code] = {
+            "code": code,
+            "code_challenge": code_challenge,
+            "auth_user": auth_user,
+            "scope": scope,
+        }
 
     async def mock_consume_auth_code(code: str) -> Optional[dict]:
-        return {
-            "code": code,
-            "code_challenge": "",
-            "auth_user": "admin",
-            "scope": "audit:read",
-        }
+        return _auth_codes.pop(code, None)
 
     monkeypatch.setattr("routers.auth.user_store.authenticate", mock_authenticate)
     monkeypatch.setattr("routers.auth.user_store.get_user", mock_get_user)
@@ -428,14 +435,17 @@ class TestScopeEnforcement:
         })
         token = login_resp.json()["access_token"]
 
-        from routers.risk import router as risk_router
-        from services.auth import auth_middleware as _am
+        with pytest.MonkeyPatch.context() as mp:
+            async def _noop(*a, **kw):
+                pass
+            mp.setattr("routers.risk.record_audit_evidence", _noop)
+            mp.setattr("routers.risk.log_audit_event", _noop)
 
-        response = await client.post(
-            "/api/risk/classify",
-            json={"modelId": "test-model", "modelType": "general_purpose_ai", "sector": "healthcare"},
-            headers={"Authorization": f"Bearer {token}"},
-        )
+            response = await client.post(
+                "/api/risk/classify",
+                json={"modelId": "test-model", "modelType": "general_purpose_ai", "sector": "healthcare"},
+                headers={"Authorization": f"Bearer {token}"},
+            )
         assert response.status_code in (200, 403), response.text
         if response.status_code == 403:
             assert "Insufficient scope" in response.text

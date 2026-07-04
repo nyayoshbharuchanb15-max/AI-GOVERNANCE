@@ -11,7 +11,6 @@ ISO/IEC 42001:2023 Clause 7.4.3 — Supply chain permission controls.
 NIST AI RMF GOVERN 1.2 — Tool access governance.
 """
 
-from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request
 from models.schemas import (
     AuditToolPermissionsRequest,

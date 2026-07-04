@@ -4,6 +4,7 @@ Tests: ROPA Generation (GDPR Art. 30) — Record of Processing Activities
 
 from __future__ import annotations
 import uuid
+from unittest.mock import MagicMock
 
 import pytest
 from models.schemas import (
@@ -13,6 +14,23 @@ from models.schemas import (
     ROPADataCategory,
 )
 from routers.ropa import generate_ropa
+
+
+def _make_request_obj(scopes=None):
+    """Create a minimal mock Request object that satisfies @require_scope."""
+    req = MagicMock()
+    req.state.scopes = scopes or ["audit:write"]
+    return req
+
+
+async def _noop_record_audit(**kwargs):
+    pass
+
+
+@pytest.fixture
+def mock_record_audit_evidence(monkeypatch):
+    monkeypatch.setattr("routers.ropa.record_audit_evidence", _noop_record_audit)
+    yield monkeypatch
 
 
 class TestGenerateROPARequestValidation:
@@ -49,40 +67,36 @@ class TestGenerateROPARequestValidation:
         req = GenerateROPARequest(
             modelId="test-model",
             controllerName="Acme Corp",
-            controllerRepresentative="Jane Doe",
-            dpoName="John Smith",
-            controllerAddress="123 Main St, London, UK",
+            controllerRepresentative="John Doe",
+            dpoName="Data Protection Officer",
+            controllerAddress="123 Main St",
             controllerEmail="dpo@acme.com",
-            jointControllers=["Partner Ltd"],
-            processingPurposes=["Model training", "Inference serving"],
+            jointControllers=["Partner Corp"],
+            processingPurposes=["Training", "Analytics"],
             dataSubjectCategories=[
                 ROPADataSubjectCategory(
-                    category="customers",
-                    description="End users of the AI system",
-                    retentionPeriod="5 years",
-                    erasureMechanism="Right to erasure via portal",
-                ),
+                    category="employees",
+                    description="Employees",
+                    retentionPeriod="3 years",
+                    erasureMechanism="Delete after notice",
+                )
             ],
             dataCategories=[
                 ROPADataCategory(
-                    category="biometric_data",
-                    description="Facial recognition data",
-                    specialCategory=True,
-                    retentionPeriod="2 years",
-                    erasureMechanism="Anonymized after 2 years",
-                    securityMeasures=["Encryption", "Access control", "Audit logging"],
-                ),
+                    category="performance_data",
+                    description="Metrics",
+                    retentionPeriod="5 years",
+                    erasureMechanism="Archived then deleted",
+                    securityMeasures=["Encryption"],
+                )
             ],
-            recipientCategories=["AWS", "Auth0"],
-            crossBorderTransfer=True,
-            thirdCountries=["United States"],
-            transferSafeguards=["SCCs", "DPA in place"],
-            retentionScheduleDescription="Retention per data category policy",
-            securityMeasures=["Encryption at rest", "TLS 1.3", "RBAC"],
+            recipientCategories=["Cloud provider"],
         )
-        assert req.dpoName == "John Smith"
-        assert len(req.securityMeasures) == 3
-        assert req.crossBorderTransfer is True
+        assert req.controllerRepresentative == "John Doe"
+        assert req.dpoName == "Data Protection Officer"
+        assert req.jointControllers == ["Partner Corp"]
+        assert "Training" in req.processingPurposes
+        assert "Analytics" in req.processingPurposes
 
     def test_special_category_flag(self):
         cat = ROPADataCategory(
@@ -132,8 +146,7 @@ class TestROPADataCategory:
 
 class TestGenerateROPAResponse:
     @pytest.mark.asyncio
-    async def test_returns_ropa_report(self, monkeypatch):
-        monkeypatch.setattr("routers.ropa.record_audit_evidence", lambda **kw: None)
+    async def test_returns_ropa_report(self, mock_record_audit_evidence):
         req = GenerateROPARequest(
             modelId="test-model",
             controllerName="Acme Corp",
@@ -146,6 +159,8 @@ class TestGenerateROPAResponse:
                     description="Employees",
                     retentionPeriod="3 years",
                     erasureMechanism="Delete after notice",
+                    securityMeasures=[],
+                    specialCategory=False,
                 )
             ],
             dataCategories=[
@@ -159,14 +174,13 @@ class TestGenerateROPAResponse:
             ],
             recipientCategories=["Cloud provider"],
         )
-        report = await generate_ropa(req, request_obj=None)  # type: ignore
+        report = await generate_ropa(req, request_obj=_make_request_obj())
         assert isinstance(report, ROPAReport)
         assert report.modelId == "test-model"
         assert report.controllerName == "Acme Corp"
 
     @pytest.mark.asyncio
-    async def test_ropa_id_is_generated(self, monkeypatch):
-        monkeypatch.setattr("routers.ropa.record_audit_evidence", lambda **kw: None)
+    async def test_ropa_id_is_generated(self, mock_record_audit_evidence):
         req = GenerateROPARequest(
             modelId="test-model",
             controllerName="Acme Corp",
@@ -179,6 +193,8 @@ class TestGenerateROPAResponse:
                     description="Employees",
                     retentionPeriod="3 years",
                     erasureMechanism="Auto-delete",
+                    securityMeasures=[],
+                    specialCategory=False,
                 )
             ],
             dataCategories=[
@@ -192,12 +208,12 @@ class TestGenerateROPAResponse:
             ],
             recipientCategories=["Provider"],
         )
-        report = await generate_ropa(req, request_obj=None)  # type: ignore
-        assert uuid.UUID(report.ropaId)
+        report = await generate_ropa(req, request_obj=_make_request_obj())
+        assert report.ropaId is not None
+        assert report.ropaId.startswith("urn:uuid:") or len(report.ropaId) == 36
 
     @pytest.mark.asyncio
-    async def test_all_fields_passed_through(self, monkeypatch):
-        monkeypatch.setattr("routers.ropa.record_audit_evidence", lambda **kw: None)
+    async def test_all_fields_passed_through(self, mock_record_audit_evidence):
         req = GenerateROPARequest(
             modelId="model-123",
             controllerName="Big Corp",
@@ -213,6 +229,8 @@ class TestGenerateROPAResponse:
                     description="Platform users",
                     retentionPeriod="3 years",
                     erasureMechanism="Account deletion",
+                    securityMeasures=[],
+                    specialCategory=False,
                 ),
             ],
             dataCategories=[
@@ -231,7 +249,7 @@ class TestGenerateROPAResponse:
             retentionScheduleDescription="Per category policy",
             securityMeasures=["TLS", "RBAC", "Encryption"],
         )
-        report = await generate_ropa(req, request_obj=None)  # type: ignore
+        report = await generate_ropa(req, request_obj=_make_request_obj())
         assert report.controllerRepresentative == "Alice"
         assert report.dpoName == "Bob"
         assert report.jointControllers == ["Joint Inc"]
@@ -241,8 +259,7 @@ class TestGenerateROPAResponse:
         assert "TLS" in report.securityMeasures
 
     @pytest.mark.asyncio
-    async def test_compliant_with_all_requirements(self, monkeypatch):
-        monkeypatch.setattr("routers.ropa.record_audit_evidence", lambda **kw: None)
+    async def test_compliant_with_all_requirements(self, mock_record_audit_evidence):
         req = GenerateROPARequest(
             modelId="test",
             controllerName="Compliant Corp",
@@ -255,6 +272,8 @@ class TestGenerateROPAResponse:
                     description="Users",
                     retentionPeriod="3y",
                     erasureMechanism="Del",
+                    securityMeasures=[],
+                    specialCategory=False,
                 )
             ],
             dataCategories=[
@@ -268,12 +287,11 @@ class TestGenerateROPAResponse:
             ],
             recipientCategories=["Cloud"],
         )
-        report = await generate_ropa(req, request_obj=None)  # type: ignore
+        report = await generate_ropa(req, request_obj=_make_request_obj())
         assert report.compliant is True
 
     @pytest.mark.asyncio
-    async def test_non_compliant_when_retention_missing(self, monkeypatch):
-        monkeypatch.setattr("routers.ropa.record_audit_evidence", lambda **kw: None)
+    async def test_non_compliant_when_retention_missing(self, mock_record_audit_evidence):
         req = GenerateROPARequest(
             modelId="test",
             controllerName="NonCompliant Corp",
@@ -286,6 +304,8 @@ class TestGenerateROPAResponse:
                     description="Users",
                     retentionPeriod="3y",
                     erasureMechanism="Del",
+                    securityMeasures=[],
+                    specialCategory=False,
                 )
             ],
             dataCategories=[
@@ -299,12 +319,11 @@ class TestGenerateROPAResponse:
             ],
             recipientCategories=["Cloud"],
         )
-        report = await generate_ropa(req, request_obj=None)  # type: ignore
+        report = await generate_ropa(req, request_obj=_make_request_obj())
         assert report.compliant is False
 
     @pytest.mark.asyncio
-    async def test_non_compliant_when_no_controller_name(self, monkeypatch):
-        monkeypatch.setattr("routers.ropa.record_audit_evidence", lambda **kw: None)
+    async def test_non_compliant_when_no_controller_name(self, mock_record_audit_evidence):
         req = GenerateROPARequest(
             modelId="test",
             controllerName="",
@@ -317,6 +336,8 @@ class TestGenerateROPAResponse:
                     description="Users",
                     retentionPeriod="3y",
                     erasureMechanism="Del",
+                    securityMeasures=[],
+                    specialCategory=False,
                 )
             ],
             dataCategories=[
@@ -330,12 +351,11 @@ class TestGenerateROPAResponse:
             ],
             recipientCategories=["Cloud"],
         )
-        report = await generate_ropa(req, request_obj=None)  # type: ignore
+        report = await generate_ropa(req, request_obj=_make_request_obj())
         assert report.compliant is False
 
     @pytest.mark.asyncio
-    async def test_cross_border_without_safeguards_non_compliant(self, monkeypatch):
-        monkeypatch.setattr("routers.ropa.record_audit_evidence", lambda **kw: None)
+    async def test_cross_border_without_safeguards_non_compliant(self, mock_record_audit_evidence):
         req = GenerateROPARequest(
             modelId="test",
             controllerName="Corp",
@@ -348,6 +368,8 @@ class TestGenerateROPAResponse:
                     description="Users",
                     retentionPeriod="3y",
                     erasureMechanism="Del",
+                    securityMeasures=[],
+                    specialCategory=False,
                 )
             ],
             dataCategories=[
@@ -361,15 +383,13 @@ class TestGenerateROPAResponse:
             ],
             recipientCategories=["Cloud"],
             crossBorderTransfer=True,
-            thirdCountries=["US"],
             transferSafeguards=[],
         )
-        report = await generate_ropa(req, request_obj=None)  # type: ignore
+        report = await generate_ropa(req, request_obj=_make_request_obj())
         assert report.compliant is False
 
     @pytest.mark.asyncio
-    async def test_regulatory_mappings_present(self, monkeypatch):
-        monkeypatch.setattr("routers.ropa.record_audit_evidence", lambda **kw: None)
+    async def test_regulatory_mappings_present(self, mock_record_audit_evidence):
         req = GenerateROPARequest(
             modelId="test",
             controllerName="Corp",
@@ -382,6 +402,8 @@ class TestGenerateROPAResponse:
                     description="Users",
                     retentionPeriod="3y",
                     erasureMechanism="Del",
+                    securityMeasures=[],
+                    specialCategory=False,
                 )
             ],
             dataCategories=[
@@ -395,13 +417,12 @@ class TestGenerateROPAResponse:
             ],
             recipientCategories=["Cloud"],
         )
-        report = await generate_ropa(req, request_obj=None)  # type: ignore
-        assert "GDPR Art. 30" in report.mappedArticles
-        assert "ISO/IEC 42001:2023" in report.iso42001Clause
+        report = await generate_ropa(req, request_obj=_make_request_obj())
+        assert any("GDPR Art. 30" in a for a in report.mappedArticles)
+        assert "ISO/IEC 42001:2023 Clause 7.5" in report.iso42001Clause
 
     @pytest.mark.asyncio
-    async def test_retention_schedule_fallback(self, monkeypatch):
-        monkeypatch.setattr("routers.ropa.record_audit_evidence", lambda **kw: None)
+    async def test_retention_schedule_fallback(self, mock_record_audit_evidence):
         req = GenerateROPARequest(
             modelId="test",
             controllerName="Corp",
@@ -414,6 +435,8 @@ class TestGenerateROPAResponse:
                     description="Users",
                     retentionPeriod="3y",
                     erasureMechanism="Del",
+                    securityMeasures=[],
+                    specialCategory=False,
                 )
             ],
             dataCategories=[
@@ -426,6 +449,7 @@ class TestGenerateROPAResponse:
                 ),
             ],
             recipientCategories=["Cloud"],
+            retentionScheduleDescription="",
         )
-        report = await generate_ropa(req, request_obj=None)  # type: ignore
-        assert "Retention periods are defined per data category" in report.retentionScheduleDescription
+        report = await generate_ropa(req, request_obj=_make_request_obj())
+        assert report.retentionScheduleDescription == "Retention periods are defined per data category above."

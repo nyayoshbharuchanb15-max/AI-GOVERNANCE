@@ -10,7 +10,6 @@ NIST AI RMF GOVERN 1.2 — Supply chain and prompt engineering governance.
 ISO/IEC 42001:2023 Clause 8.1.3 — Adversarial resilience of prompts.
 """
 
-from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request
 from models.schemas import (
     AuditPromptTemplatesRequest,

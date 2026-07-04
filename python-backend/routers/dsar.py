@@ -15,7 +15,6 @@ ISO/IEC 42001:2023 Clause 7.5 — Erasure is documented as
 evidence of conformity with data protection obligations.
 """
 
-from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, HTTPException, Request

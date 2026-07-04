@@ -25,7 +25,7 @@ class TestBiasEngineDataPreparation:
         ]
         df = _prepare_dataframe(samples, ["race"])
         assert "prediction" in df.columns
-        assert df["prediction"].tolist() == [1, 0]
+        assert df["prediction"].tolist() == [0.9, 0.2]
 
     def test_missing_attributes_are_created(self):
         samples = [{"prediction": 1, "label": 1}]

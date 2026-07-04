@@ -14,7 +14,6 @@ W3C VC Data Model 1.1 — Verifiable Credentials may be revoked by
 the issuer. Verifiers must be able to check revocation status.
 """
 
-from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Request

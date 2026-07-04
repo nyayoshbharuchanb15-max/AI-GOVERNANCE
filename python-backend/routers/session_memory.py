@@ -11,7 +11,6 @@ EU AI Act Art. 15 — Accuracy and monitoring.
 ISO/IEC 42001:2023 Clause 8.2 — Controls for AI system memory management.
 """
 
-from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request
 from models.schemas import (
     AuditSessionMemoryRequest,

@@ -29,11 +29,37 @@ import numpy as np
 import pandas as pd
 
 from fairlearn.metrics import (
+    MetricFrame,
     demographic_parity_difference,
-    equal_opportunity_difference,
-    disparate_impact_ratio,
+    selection_rate_ratio,
 )
+from sklearn.metrics import recall_score
 from models.schemas import BiasMetric, BiasReport, RiskLevel
+
+
+def equal_opportunity_difference(
+    y_true, y_pred, *, sensitive_features
+) -> float:
+    """
+    Compute equal opportunity difference: max group TPR − min group TPR.
+
+    Equal opportunity requires that the true positive rate (recall) is
+    equal across all groups defined by `sensitive_features`.  The metric
+    is defined as the difference between the group with the highest TPR
+    and the group with the lowest TPR.
+
+    This mirrors the definition from fairlearn (the TPR-only component
+    of equalized odds) but uses ``MetricFrame`` directly so it works
+    with fairlearn 0.10.0 which no longer exports a standalone function.
+    """
+    mf = MetricFrame(
+        metrics=recall_score,
+        y_true=y_true,
+        y_pred=y_pred,
+        sensitive_features=sensitive_features,
+    )
+    by_group = mf.by_group
+    return float(by_group.max() - by_group.min())
 
 
 def _prepare_dataframe(
@@ -165,7 +191,7 @@ async def run_bias_assessment(
         # Per the 80% rule (EEOC): values below 0.8 indicate adverse impact.
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            di_ratio = disparate_impact_ratio(
+            di_ratio = selection_rate_ratio(
                 y_true, y_pred, sensitive_features=sensitive,
             )
 

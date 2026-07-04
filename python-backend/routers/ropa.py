@@ -14,7 +14,6 @@ ISO/IEC 42001:2023 Clause 7.5 — Documented information shall be
 retained as evidence of conformity.
 """
 
-from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, HTTPException, Request

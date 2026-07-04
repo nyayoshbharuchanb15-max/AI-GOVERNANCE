@@ -20,7 +20,6 @@ ISO/IEC 42001:2023 Clause 6.2 — Data protection impact assessment
 extends to cover local regulations including the DPDP Act.
 """
 
-from __future__ import annotations
 import uuid
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, HTTPException, Request

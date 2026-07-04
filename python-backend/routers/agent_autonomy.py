@@ -10,7 +10,6 @@ NIST AI RMF GOVERN 3.2 — Oversight governance.
 ISO/IEC 42001:2023 Clause 6.1 — Risk assessment for autonomous agents.
 """
 
-from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request
 from models.schemas import (
     ClassifyAgentAutonomyRequest,

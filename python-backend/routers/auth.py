@@ -20,7 +20,6 @@ Endpoints:
   GET  /api/auth/keys        — Public JWKS endpoint
 """
 
-from __future__ import annotations
 import json
 import os
 from datetime import datetime, timezone

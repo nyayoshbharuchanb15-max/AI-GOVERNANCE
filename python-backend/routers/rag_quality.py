@@ -10,7 +10,6 @@ ISO/IEC 42001:2023 Clause 9.1 — Performance evaluation of AI systems.
 EU AI Act Art. 10 — Data quality and governance for training data.
 """
 
-from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request
 from models.schemas import (
     AuditRAGQualityRequest,
