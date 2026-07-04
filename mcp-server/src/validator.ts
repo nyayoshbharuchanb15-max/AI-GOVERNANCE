@@ -8,7 +8,7 @@
 //  of truth). NO manual sync needed — schemas are shared with index.ts.
 // ═══════════════════════════════════════════════════════════════════
 
-import Ajv, { type ValidateFunction, type ErrorObject } from "ajv";
+import { Ajv, type ValidateFunction, type ErrorObject } from "ajv";
 import { TOOL_SCHEMAS } from "./tool-schemas.js";
 
 const ajv = new Ajv({

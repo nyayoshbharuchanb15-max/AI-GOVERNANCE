@@ -12,36 +12,19 @@
 
 import { randomUUID } from "node:crypto";
 import type { Express, Request, Response } from "express";
-
-// ─── MCP JSON-RPC Types ─────────────────────────────────────────
-
-interface JSONRPCRequest {
-  jsonrpc: "2.0";
-  id: string | number;
-  method: string;
-  params?: Record<string, unknown>;
-}
-
-interface JSONRPCResponse {
-  jsonrpc: "2.0";
-  id: string | number | null;
-  result?: unknown;
-  error?: { code: number; message: string; data?: unknown };
-}
-
-interface JSONRPCNotification {
-  jsonrpc: "2.0";
-  method: string;
-  params?: Record<string, unknown>;
-}
-
-type JSONRPCMessage = JSONRPCRequest | JSONRPCResponse | JSONRPCNotification;
+import type {
+  JSONRPCMessage,
+  JSONRPCRequest,
+  JSONRPCResponse,
+  JSONRPCNotification,
+} from "@modelcontextprotocol/sdk/types.js";
+import type { TransportSendOptions } from "@modelcontextprotocol/sdk/shared/transport.js";
 
 // ─── Transport Interface (matches MCP SDK) ──────────────────────
 
 export interface Transport {
   start(): Promise<void>;
-  send(message: JSONRPCMessage): Promise<void>;
+  send(message: JSONRPCMessage, options?: TransportSendOptions): Promise<void>;
   close(): Promise<void>;
   onclose?: () => void;
   onerror?: (error: Error) => void;
@@ -89,7 +72,7 @@ export class StreamableHTTPTransport implements Transport {
     }
   }
 
-  async send(message: JSONRPCMessage): Promise<void> {
+  async send(message: JSONRPCMessage, _options?: TransportSendOptions): Promise<void> {
     if (this._closed) return;
 
     // If SSE connection is active, push via SSE
@@ -233,34 +216,28 @@ export class StreamableHTTPTransport implements Transport {
   private async _processRequest(
     msg: JSONRPCRequest
   ): Promise<JSONRPCResponse | null> {
-    return new Promise((resolve) => {
-      const responsePromise = new Promise<JSONRPCResponse | void>((res) => {
-        // Set up one-time message handler for the response
-        const originalOnMessage = this.onmessage;
-        this.onmessage = (response) => {
-          this.onmessage = originalOnMessage;
-          if ("id" in response && (response as JSONRPCResponse).id === msg.id) {
-            res(response as JSONRPCResponse);
-          } else {
-            // It's a notification or different response — forward
-            originalOnMessage?.(response);
-          }
-        };
+    return new Promise<JSONRPCResponse | null>((resolve) => {
+      const originalOnMessage = this.onmessage;
+      this.onmessage = (response) => {
+        this.onmessage = originalOnMessage;
+        if ("id" in response && (response as JSONRPCResponse).id === msg.id) {
+          resolve(response as JSONRPCResponse);
+        } else {
+          originalOnMessage?.(response);
+        }
+      };
 
-        // Forward the request to the MCP server
-        this.onmessage?.(msg);
+      // Forward the request to the MCP server
+      this.onmessage?.(msg);
 
-        // Timeout after 30 seconds
-        setTimeout(() => {
-          resolve({
-            jsonrpc: "2.0",
-            id: msg.id,
-            error: { code: -32603, message: "Request timed out" },
-          });
-        }, 30000);
-      });
-
-      responsePromise.then(resolve);
+      // Timeout after 30 seconds
+      setTimeout(() => {
+        resolve({
+          jsonrpc: "2.0",
+          id: msg.id,
+          error: { code: -32603, message: "Request timed out" },
+        });
+      }, 30000);
     });
   }
 }

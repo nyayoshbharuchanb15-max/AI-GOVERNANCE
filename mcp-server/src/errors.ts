@@ -11,3 +11,5 @@ export class McpError extends Error {
     this.data = data;
   }
 }
+
+export const ERROR_CODE_REQUEST_CANCELLED = -32800;

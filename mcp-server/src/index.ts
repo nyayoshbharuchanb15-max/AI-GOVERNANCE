@@ -41,6 +41,7 @@ import type {
   AgentAutonomyResult,
 } from "./types.js";
 import { TOOL_SCHEMAS } from "./tool-schemas.js";
+import { ERROR_CODE_REQUEST_CANCELLED } from "./errors.js";
 
 // ─── Constants ────────────────────────────────────────────────────
 const SERVER_VERSION = "3.1.0";
@@ -60,8 +61,10 @@ function mcpError(code: ErrorCode, message: string, data?: unknown): {
 
 // ─── Progress Notification Helper ─────────────────────────────────
 
+type SendNotificationFn = (notification: { method: string; params?: Record<string, unknown> }) => Promise<void>;
+
 async function sendProgress(
-  sendNotification: (notification: Record<string, unknown>) => Promise<void>,
+  sendNotification: SendNotificationFn,
   progressToken: string | number | undefined,
   progress: number,
   total: number,
@@ -477,8 +480,9 @@ server.setRequestHandler(GetPromptRequestSchema, async (request) => {
 //  HANDLER: Cancelled Notification (MCP spec §notifications/cancelled)
 // ═══════════════════════════════════════════════════════════════════
 
-server.setRequestHandler(CancelledNotificationSchema, async (notification) => {
+server.setNotificationHandler(CancelledNotificationSchema, async (notification) => {
   const { requestId, reason } = notification.params;
+  if (requestId === undefined) return;
   cancelledRequests.add(requestId);
   console.error(
     `[ComplianceStack MCP] Request ${requestId} cancelled: ${reason || "no reason provided"}`
@@ -491,7 +495,7 @@ server.setRequestHandler(CancelledNotificationSchema, async (notification) => {
 
 server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
   const { name, arguments: args } = request.params;
-  const requestId = request.id;
+  const requestId = extra.requestId;
   const _meta = (request.params as Record<string, unknown>)._meta as
     | { progressToken?: string | number }
     | undefined;
@@ -500,7 +504,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
   // Check if request was cancelled
   if (isCancelled(requestId)) {
     cancelledRequests.delete(requestId);
-    return mcpError(ErrorCode.RequestCancelled, "Request was cancelled by the client");
+    return mcpError(ERROR_CODE_REQUEST_CANCELLED as unknown as ErrorCode, "Request was cancelled by the client");
   }
 
    if (!args) {
@@ -981,7 +985,6 @@ async function main() {
             // Create new session
             const session = sessionManager.createSession();
             const transport = session.transport;
-            transport.onmessage = (msg) => server.emit("message", msg);
             await server.connect(transport);
 
             res.setHeader("mcp-session-id", session.id);
