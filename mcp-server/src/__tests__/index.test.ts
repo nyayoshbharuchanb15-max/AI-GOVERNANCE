@@ -19,12 +19,8 @@ describe("validateToolInput", () => {
     it("valid classify_ai_risk input passes", () => {
       const result = validateToolInput("classify_ai_risk", {
         modelId: "gpt-4-healthcare-v2",
-        modelType: "llm",
-        trainingDataSources: ["pubmed", "mimic-iv"],
-        deploymentDomain: "healthcare",
-        hasBiometricData: false,
-        hasMinorsData: false,
-        isCriticalInfrastructure: false,
+        modelType: "general_purpose_ai",
+        sector: "healthcare",
       });
       expect(result.valid).toBe(true);
       expect(result.errors).toBeUndefined();
@@ -32,8 +28,8 @@ describe("validateToolInput", () => {
 
     it("missing required modelId fails", () => {
       const result = validateToolInput("classify_ai_risk", {
-        modelType: "llm",
-        deploymentDomain: "healthcare",
+        modelType: "general_purpose_ai",
+        sector: "healthcare",
       });
       expect(result.valid).toBe(false);
       expect(result.errors).toBeDefined();
@@ -45,7 +41,8 @@ describe("validateToolInput", () => {
     it("invalid modelId pattern fails", () => {
       const result = validateToolInput("classify_ai_risk", {
         modelId: "!invalid-model-id!",
-        modelType: "llm",
+        modelType: "general_purpose_ai",
+        sector: "healthcare",
       });
       expect(result.valid).toBe(false);
       expect(result.errors).toBeDefined();
@@ -434,7 +431,7 @@ describe("McpError", () => {
     ) {
       const error = new McpError(code, message, data);
       return {
-        content: [{ type: "text" as const, text: `[MCP Error ${code}] ${message}` }],
+        content: [{ type: "text" as const, text: message }],
         isError: true as const,
       };
     }
@@ -446,8 +443,7 @@ describe("McpError", () => {
     expect(result.isError).toBe(true);
     expect(result.content).toHaveLength(1);
     expect(result.content[0].type).toBe("text");
-    expect(result.content[0].text).toContain("[MCP Error -32602]");
-    expect(result.content[0].text).toContain("No arguments provided");
+    expect(result.content[0].text).toBe("No arguments provided");
   });
 
   it("mcpError with data parameter", () => {

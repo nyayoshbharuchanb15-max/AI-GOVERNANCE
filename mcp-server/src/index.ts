@@ -55,7 +55,7 @@ function mcpError(code: ErrorCode, message: string, data?: unknown): {
 } {
   const error = new McpError(code, message, data);
   return {
-    content: [{ type: "text", text: `[MCP Error ${code}] ${message}` }],
+    content: [{ type: "text", text: message }],
     isError: true as const,
   };
 }
@@ -505,22 +505,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
     return mcpError(ErrorCode.RequestCancelled, "Request was cancelled by the client");
   }
 
-  if (!args) {
-    return mcpError(ErrorCode.InvalidParams, "No arguments provided. All tools require at least a modelId parameter.");
-  }
+   if (!args) {
+     return mcpError(ErrorCode.InvalidParams, "No arguments provided");
+   }
 
-  // Validate modelId is present and non-empty for all tools
-  if (typeof args.modelId !== "string" || args.modelId.trim().length === 0) {
-    return mcpError(ErrorCode.InvalidParams, "The 'modelId' parameter is required and must be a non-empty string.");
-  }
+   // Validate modelId is present and non-empty for all tools
+   if (typeof args.modelId !== "string" || args.modelId.trim().length === 0) {
+     return mcpError(ErrorCode.InvalidParams, "modelId is required");
+   }
 
-  // Validate modelId format
-  if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(args.modelId as string)) {
-    return mcpError(
-      ErrorCode.InvalidParams,
-      "The 'modelId' must start with an alphanumeric character and contain only letters, numbers, dots, hyphens, or underscores.",
-    );
-  }
+   // Validate modelId format
+   if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(args.modelId as string)) {
+     return mcpError(
+       ErrorCode.InvalidParams,
+       "The 'modelId' must start with an alphanumeric character and contain only letters, numbers, dots, hyphens, or underscores.",
+     );
+   }
 
   // MCP-layer input validation against JSON Schema
   const validation = validateToolInput(name, args as Record<string, unknown>);
