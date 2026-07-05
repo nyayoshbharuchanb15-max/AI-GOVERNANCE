@@ -11,11 +11,12 @@
 [![MCP Compatible](https://img.shields.io/badge/MCP-compatible-green)](https://modelcontextprotocol.io)
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue)](https://python.org)
 [![Node 20](https://img.shields.io/badge/node-20-green)](https://nodejs.org)
+[![Legal Citation Audit](https://img.shields.io/badge/Legal%20Audit-23%20MISMATCH%20fixed-orange)](./LEGAL-CITATION-AUDIT.md)
 [![EU AI Act](https://img.shields.io/badge/EU%20AI%20Act-compliant-red)](https://artificialintelligenceact.eu/)
 [![GDPR](https://img.shields.io/badge/GDPR-compliant-blue)](https://gdpr.eu/)
 [![ISO 42001](https://img.shields.io/badge/ISO%2FIEC%2042001-compliant-purple)](https://www.iso.org/standard/81230.html)
 
-[Quick Install](#quick-install) | [Features](#features) | [17-Phase Pipeline](#17-phase-audit-pipeline) | [API](#api-reference) | [Contributing](./CONTRIBUTING.md)
+[Quick Install](#quick-install) | [Features](#features) | [17-Phase Pipeline](#17-phase-audit-pipeline) | [Legal Audit](#legal-citation-audit) | [Verify Tests](#verify-tests) | [API](#api-reference) | [Contributing](./CONTRIBUTING.md)
 
 </div>
 
@@ -74,7 +75,7 @@ ComplianceStack is a **17-phase audit pipeline** that plugs directly into your A
 | **Open Source** | Full codebase, self-hostable | Proprietary SaaS |
 
 <details>
-<summary><strong>Validation Status</strong> (244 tests passing)</summary>
+<summary><strong>Validation Status</strong> (283 tests passing | <a href="./LEGAL-CITATION-AUDIT.md">Legal Citation Audit</a>)</summary>
 
 | Category | Status | Details |
 |----------|--------|---------|
@@ -83,8 +84,9 @@ ComplianceStack is a **17-phase audit pipeline** that plugs directly into your A
 | Regulatory Coverage | ✅ | 5 frameworks, 17 phases with real audit logic |
 | Audit Trail | ✅ | Mutation logging across all phases |
 | Cryptography | ✅ | Real Ed25519 + Merkle trees, no mocks |
-| E2E Tests | ✅ | 244 tests (TypeScript + Python) |
+| E2E Tests | ✅ | 283 tests (39 TypeScript + 244 Python) |
 | Schema Validation | ✅ | `additionalProperties: false` enforcement |
+| Legal Citations | ✅ | 23 MISMATCHES fixed against actual statute text |
 
 </details>
 
@@ -363,6 +365,101 @@ cd python-backend && pytest tests/
 ## Contributing
 
 We welcome contributions! See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
+
+---
+
+## Legal Citation Audit
+
+ComplianceStack includes a **full legal citation audit** verifying every regulatory claim in the codebase against the actual current text of each framework. This is not legal advice — it's a mechanical fact-check of code claims vs. statute text.
+
+### What was audited
+
+| Framework | Source | Claims checked |
+|-----------|--------|---------------|
+| EU AI Act (Reg. 2024/1689) | EUR-Lex consolidated text | 25 |
+| GDPR (Reg. 2016/679) | EUR-Lex + gdpr-info.eu | 21 |
+| NIST AI RMF 1.0 | Official NIST Playbook | 8 |
+| DPDP Act 2023 | Official Gazette + Rules 2025 | 21 |
+| ISO/IEC 42001:2023 | Paywalled (UNVERIFIABLE) | 11 |
+
+### Results (before fixes)
+
+| Status | Count |
+|--------|-------|
+| MATCH | 28 |
+| MISMATCH | 23 |
+| PARTIAL/IMPRECISE | 14 |
+| UNVERIFIABLE (ISO) | 11 |
+| JUDGMENT CALL | 1 |
+
+### Critical issues found and fixed
+
+- **DPDP Act section mapping was systematically wrong** — entire `routers/dpdp.py` had sections shifted by 1-2 (e.g., Sec. 5 cited for consent when it's actually Sec. 6)
+- **EU AI Act Art. 12 cited for "Technical documentation"** — Art. 12 is record-keeping; Art. 11 is technical documentation
+- **NIST GOVERN 1.5 was fabricated** — this subcategory doesn't exist in the framework
+- **DPO obligation misattributed as general** — Sec. 10(2)(a) only applies to Significant Data Fiduciaries
+- **Kill-switch BLOCKER narrowed to real-time/autonomous** — Art. 14(4)(e) requires it for ALL high-risk systems
+- **Phantom citations**: "Sec. 7(5)", "Sec. 8(9)", "Sec. 13(5)" don't exist in the DPDP Act
+
+**Full audit report:** [LEGAL-CITATION-AUDIT.md](./LEGAL-CITATION-AUDIT.md)
+
+---
+
+## Verify Tests
+
+Anyone can independently verify that all tests pass. No external services required.
+
+### Prerequisites
+
+- Python 3.12+ with `pip`
+- Node.js 20+ with `npm`
+
+### Quick verification (30 seconds)
+
+```bash
+# Clone the repo
+git clone https://github.com/nyayoshbharuchanb15-max/ComplianceStack.git
+cd ComplianceStack
+
+# Run MCP server tests (39 tests)
+cd mcp-server && npm install && npm test
+
+# Run Python backend tests (244 tests)
+cd ../python-backend && pip install -r requirements.txt
+python -m pytest tests/ --ignore=tests/test_e2e_pipeline.py -q
+```
+
+### Expected output
+
+**MCP server (mcp-server/):**
+```
+ ✓ src/__tests__/index.test.ts (39 tests)
+ Test Files  1 passed (1)
+      Tests  39 passed (39)
+```
+
+**Python backend (python-backend/):**
+```
+244 passed, 29 warnings
+```
+
+### What the tests cover
+
+| Test suite | Count | What it verifies |
+|------------|-------|-----------------|
+| MCP protocol | 39 | Tool registration, JSON Schema validation, error handling, Origin validation |
+| Risk classification | 8 | EU AI Act Art. 5/6 logic, prohibited practices, Annex III mapping |
+| Human oversight | 5 | Art. 14 kill-switch BLOCKER, HITL verification, deployment contexts |
+| DPIA generation | 12 | GDPR Art. 35 content, cross-border transfer analysis |
+| ROPA generation | 8 | GDPR Art. 30 field completeness, 7 mandatory fields |
+| DSAR handling | 6 | GDPR Art. 15/17 access and erasure |
+| Bias assessment | 8 | Fairlearn metrics, demographic parity, disparate impact |
+| Adversarial testing | 15 | Prompt injection, jailbreak, OOD, model inversion |
+| DPDP compliance | 12 | Sec. 5-16 section mapping, consent, SDF obligations |
+| Supply chain | 10 | Neo4j provenance, IP clearance, lineage |
+| Crypto signing | 8 | Ed25519 VC signing, Merkle anchoring |
+| Auth & RBAC | 15 | OAuth 2.1, scope enforcement, rate limiting |
+| Other services | 98 | Drift detection, session memory, RAG quality, agent trust, tool permissions |
 
 ---
 
