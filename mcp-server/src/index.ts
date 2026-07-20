@@ -1036,6 +1036,47 @@ async function main() {
           res.type("html").send(renderWorkbenchShell(SERVER_VERSION));
         });
 
+        // /api/* → orchestrator (same-origin proxy so the SPA can talk to the
+        // FastAPI backend on a separate container). Streams bodies + preserves
+        // cookies. Preview environments (K8s ingress) also match this route
+        // but the ingress typically wins; this handler is a no-op there.
+        const orchestratorBase = (process.env.GOVERNANCE_API_URL ||
+          "http://localhost:8001").replace(/\/$/, "");
+        app.use("/api", async (req, res) => {
+          try {
+            const target = orchestratorBase + "/api" + req.url;
+            const headers: Record<string, string> = {};
+            for (const [k, v] of Object.entries(req.headers)) {
+              if (v == null) continue;
+              const lk = k.toLowerCase();
+              if (lk === "host" || lk === "content-length" ||
+                  lk === "connection" || lk === "accept-encoding") continue;
+              headers[k] = Array.isArray(v) ? v.join(", ") : v;
+            }
+            const method = req.method.toUpperCase();
+            const hasBody = method !== "GET" && method !== "HEAD";
+            const body = hasBody
+              ? (req.headers["content-type"]?.includes("application/json")
+                  ? JSON.stringify(req.body ?? {})
+                  : undefined)
+              : undefined;
+            const upstream = await fetch(target, { method, headers, body });
+            res.status(upstream.status);
+            upstream.headers.forEach((val, key) => {
+              // Never forward transfer-encoding / content-encoding — undici already decoded.
+              if (["transfer-encoding", "content-encoding"].includes(key.toLowerCase())) return;
+              res.setHeader(key, val);
+            });
+            const buf = Buffer.from(await upstream.arrayBuffer());
+            res.end(buf);
+          } catch (err) {
+            res.status(502).json({
+              detail: { code: "ORCHESTRATOR_UNREACHABLE",
+                        message: (err as Error).message },
+            });
+          }
+        });
+
         app.get("/assets/workbench.js", async (_req, res) => {
           const { getWorkbenchJs } = await import("./workbench.js");
           res.type("application/javascript").send(getWorkbenchJs());
