@@ -17,7 +17,9 @@ Use header: Authorization: Bearer <accessToken>
 ## Endpoints
 - Phases: POST /api/v1/phases/{intake|scope|risk|data-protection|fairness|robustness|explainability|certification|monitoring}
 - Reaudit: POST /api/v1/reaudit ; Runs: GET /api/v1/runs, GET /api/v1/runs/{runId} (+/lineage +/artifacts)
-- Artifacts: POST /api/v1/runs/{runId}/artifacts, GET /api/v1/runs/{runId}/artifacts
+- Artifacts: POST /api/v1/runs/{runId}/artifacts (JSON, optional contentBase64 per artifact),
+  POST /api/v1/runs/{runId}/artifacts/upload (multipart file, 20 MB max),
+  GET /api/v1/runs/{runId}/artifacts, GET /api/v1/artifacts/{artifactId} (extracted text + gap findings)
 - Certs: GET /api/v1/certificates (list), GET /api/v1/certificates/{id}, POST /api/v1/certificates/{id}/revoke
 - Certs (public): GET /api/v1/certificates/{id}/verify, /status
 - Events: GET /api/v1/events/recent, /api/v1/events/dead-letter, POST /api/v1/events/test-dead-letter

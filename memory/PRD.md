@@ -60,6 +60,76 @@ Reaudit impact matrix in AUDIT_PIPELINE.md §11; updatedPhaseInputs carries trig
 - Known pre-existing quirk (NOT introduced here): custom streamable-http transport
   terminates session on connection close (index.ts res.on("close")) — stdio is canonical.
 
+## 2026-02 iteration (part 2) — P1 bug fix + rich artifact ingest + document gap analysis
+The user marked P1 (MCP streamable-http session-close lifecycle) as a real bug and
+explicitly asked for the diagnostic core: "article-level, document-level diagnosis
+of what's missing or non-compliant, not just presence/absence checks."
+
+**P1 bug fix (streamable-http session lifecycle)**
+- `mcp-server/src/index.ts` — removed the premature `res.on('close', () =>
+  sessionManager.terminateSession(session.id))` on the initial POST /mcp
+  response. Sessions now persist across the initial POST close and are only
+  terminated by explicit DELETE /mcp or by the idle-cleanup timer in
+  `sessionManager.startCleanup()`. Also scoped `validateOrigin` to /mcp routes
+  only (was previously global — this was blocking the SPA in the previous
+  iteration).
+- `mcp-server/src/streamable-http-transport.ts` — added `detachSSE(res)` so
+  the transport clears its `_sseRes` pointer when the SSE stream closes and
+  subsequent `send()` calls queue messages for reconnection instead of
+  silently writing to a dead response.
+- `mcp-server/src/__tests__/session-lifecycle.test.ts` — 3 vitest regression
+  tests (session survives initial POST close, DELETE terminates, detachSSE
+  queues on reconnect).
+
+**Rich artifact ingest + gap analysis**
+- `store/migrations/004_gap_analysis.sql` — new extracted_text /
+  extraction_status / gap_findings / gap_score columns on governance_artifacts,
+  plus a governance_phase_gaps table.
+- `engines/document_extractor.py` — offline text extraction for PDF
+  (pypdf 6+), CSV, JSON, Markdown, plain text; server-side sha256 over the
+  actual bytes.
+- `engines/gap_analysis.py` — SPECIFICATIONS matrix declaring, for every
+  document-typed artifact, the required sections mapped to sub-articles
+  (GDPR Art. 35(7)(a) "Systematic description", Art. 35(7)(d) "Measures
+  envisaged", EU-AI-ACT Art. 10 "Training data provenance", Art. 13(3)(d)
+  "Explanation method", Art. 14(4)(e) "Stop capability", NIST-AI-RMF
+  MEASURE 2.2/2.7 …). Deterministic regex/keyword analyzer produces
+  {present | partial | gap} × {info | warning | blocker} verdicts with the
+  first matching excerpt from the document as evidence.
+- `orchestrator/ingest.py` — single source of truth for artifact side
+  effects (ingest_artifact_bytes / _base64 / _descriptor). Same code path
+  from intake, JSON upload, and multipart upload.
+- `orchestrator/citations.py::build_phase_citations` — now returns
+  document_gaps; verdict escalation merges gap-analysis signal into citation
+  verdicts (blocker gap ⇒ fail, warning gap ⇒ warning).
+- `orchestrator/pipeline.py::_persist_phase` — rolls up blocker-severity gaps
+  into phase blockers (code `DOC_GAP_<PHASE>`) and embeds
+  `documentGaps` + `documentGapSummary` in the phase outputs BEFORE the
+  integrity hash is computed, so the hash chain covers the gap findings.
+- `orchestrator/routes.py` — new endpoints:
+  - `POST /api/v1/runs/{id}/artifacts/upload` (multipart file, 20 MB max)
+  - `POST /api/v1/runs/{id}/artifacts` now accepts `contentBase64` per artifact
+  - `GET /api/v1/artifacts/{id}` (full extracted text + gap findings)
+  - `GET /api/v1/runs/{id}` now returns `gaps[]`
+- `mcp-server/ui/workbench.js` — file upload input in the intake artifact
+  editor; new "Document gaps" KPI card on run detail; new "Extraction" +
+  "Gap score" columns on the artifact table; per-phase document-gap section
+  in the timeline showing each expected sub-article, its verdict, and the
+  matching excerpt from the uploaded document.
+- `orchestrator/requirements.txt` — pypdf>=6.0, python-multipart>=0.0.20.
+- `DEPLOYMENT.md` — deployment guide (Docker Compose, env vars, migrations
+  002/003/004, backup/restore, security hardening checklist).
+- `tests/governance/test_gap_analysis.py` — 7 tests: well-formed DPIA has
+  no blocker gaps, BAD DPIA (missing "measures envisaged") triggers
+  blocker gap on GDPR Art. 35(7)(d) AND blocks the data_protection phase,
+  multipart upload computes sha256, PDF via pypdf extracts + analyzes,
+  bias-test JSON without DI triggers blocker gap, artifact text endpoint.
+
+**Verification**: Testing agent iteration 3 signed off 100% backend / 100%
+frontend. 28/28 python E2E + 52/52 vitest = 80 tests total, all passing.
+P1 fix verified via 3 vitest regression tests + testing-agent HTTP walk of
+the full session lifecycle against port 3000.
+
 ## 2026-02 iteration — Auditor Workbench UI + evidence-artifact citations
 User asked "can I have a user-friendly tool for auditing?" with an explicit follow-up:
 every phase must show WHICH documents/artifacts were inspected against WHICH regulatory
@@ -113,15 +183,23 @@ neo4j/governance_secret, started via `neo4j start`). After pod restart: `service
 start; redis-server --daemonize yes; neo4j start` then restart supervisor backend/frontend.
 
 ## Backlog / next
-- DONE (2026-06): GET / on the MCP server (port 3000) serves a live status console
-  (mcp-server/src/status-page.ts) — orchestrator/Postgres/Neo4j/Redis/signer health,
-  9-phase table, recent evidence events, curl quickstart.
-- DONE (2026-02): GET /api/v1/runs?modelId= listing endpoint (workbench dashboard).
-- DONE (2026-02): Auditor Workbench SPA at / with 9-phase interactive wizard, article-
-  level artifact citations, cert viewer/verifier, event ledger, reaudit trigger.
-- P1: fix pre-existing streamable-http session lifecycle in mcp-server transport
-- P2: CI workflow that spins up the full compose stack + runs governance E2E on every push
-- P2: NATS option for the event fabric; RFC 3161 timestamp anchoring for governance certs
-- P2: publish deployment guide (DEPLOYMENT.md)
-- P2: rich artifact ingest — inline PDF/CSV/JSON upload via multipart with server-side sha256
-  (currently URIs + optional 4 KB snippet); PDF text extraction for automatic phase gap-scan
+- DONE (2026-02, part 2): fix pre-existing streamable-http session lifecycle
+  in mcp-server transport (P1 bug) — sessions now survive across the initial
+  POST close; only terminated on DELETE or idle-timeout. Regression tests
+  added at mcp-server/src/__tests__/session-lifecycle.test.ts.
+- DONE (2026-02, part 2): rich artifact ingest — multipart PDF/CSV/JSON/MD/TXT
+  upload, server-side sha256, pypdf text extraction, deterministic per-type
+  gap analysis producing article-level "which section of which document
+  proved (or failed to prove) compliance" diagnostics that surface as phase
+  blockers when severity=blocker.
+- DONE (2026-02, part 2): DEPLOYMENT.md — compose + bare-metal, env vars,
+  migrations, backup/restore, security hardening.
+- DONE (2026-02): Auditor Workbench SPA + article-level artifact citations.
+- Backlog (deferred by user until legal-grade production push): CI workflow
+  running compose stack + governance E2E on every push; NATS option for the
+  event fabric; RFC 3161 timestamp anchoring for VC 2.0 certificates.
+- Backlog (future enhancement to gap analysis): plug in an on-prem LLM-free
+  NER pass for artifact types that don't lend themselves to regex (e.g.
+  extracting explicit retention days, DPO email, dataset row counts). The
+  spec matrix already supports adding structured extractors alongside the
+  regex checks.
