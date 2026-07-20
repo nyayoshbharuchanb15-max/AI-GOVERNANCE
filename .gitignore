@@ -14,3 +14,9 @@ redis-data/
 venv/
 .idea/
 .vscode/
+.env.*
+*.env
+credentials.json
+*.pem
+*.key
+.credentials
