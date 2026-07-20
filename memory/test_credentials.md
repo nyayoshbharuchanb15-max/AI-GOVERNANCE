@@ -58,9 +58,15 @@ Use header: Authorization: Bearer <accessToken>
   - `POST /api/v1/auth/google/session` — header `X-Session-ID: <id>` → 200 `{accessToken, role, scopes, clientId, user}` + `Set-Cookie: governance_session=...; HttpOnly; Secure; SameSite=None`
   - `GET /api/v1/auth/me` — via cookie or `Authorization: Bearer <session_token>` → 200 `{userId, email, name, picture, role, scopes, expiresAt}`
   - `POST /api/v1/auth/logout` — 204, deletes DB row + clears cookie
-- **Test fixture escape hatch** (preview only, guarded by `GOV_ALLOW_TEST_AUTH=1`):
-  - `GOOGLE_AUTH_TEST_SESSION_ID=test-fixture-session-id-abc123`
-  - `GOOGLE_AUTH_TEST_SESSION_TOKEN=test-fixture-session-token-xyz789`
-  - `GOOGLE_AUTH_TEST_EMAIL=test.user@governance.local`
-  - Users signing in with the fixture ID are minted role `governance-admin` (full scopes).
-- Role mapping: all Google-authenticated users → **governance-admin** (per user product decision).
+- **Test fixture escape hatch** (DEVELOPMENT ONLY — see SEC-001 in PRD.md):
+  - Guarded by `GOV_ALLOW_TEST_AUTH=1` **AND** `NODE_ENV != production`.
+  - **NOT enabled in the deployed `.env`.** The pytest suite enables it
+    ephemerally via `tests/governance/conftest.py::pytest_configure` (appends
+    the 4 test vars to `.env`, restarts backend, strips them on teardown).
+  - When enabled, `X-Session-ID: test-fixture-session-id-abc123` returns
+    a synthetic user (`test.user@governance.local`) with role `governance-admin`.
+- **Role mapping**: default `governance-admin` (per user product decision).
+  Override with `GOOGLE_ALLOWED_EMAILS` and/or `GOOGLE_ALLOWED_DOMAINS`
+  (comma-separated `email=role` entries). Unlisted users get 403.
+  Orchestrator refuses to boot in production when both are empty.
+- **Hardened air-gapped mode**: `HIDE_GOOGLE_SIGNIN=1` removes the button entirely.

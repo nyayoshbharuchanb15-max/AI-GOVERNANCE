@@ -170,6 +170,13 @@ services:
       # Google Sign-In (Emergent-managed OAuth). Requires egress to
       # auth.emergentagent.com + demobackend.emergentagent.com. Fully hidden
       # by mcp-server if HIDE_GOOGLE_SIGNIN=1.
+      # ALLOW-LIST (SEC-002): if both empty AND NODE_ENV=production the
+      # orchestrator refuses to boot. Format: "user@example.com=role,..."
+      GOOGLE_ALLOWED_EMAILS: ${GOOGLE_ALLOWED_EMAILS:-}
+      GOOGLE_ALLOWED_DOMAINS: ${GOOGLE_ALLOWED_DOMAINS:-}
+      # Testing escape hatch (never set in production; boot refuses when
+      # NODE_ENV=production AND this is 1).
+      NODE_ENV: ${NODE_ENV:-production}
       GOV_ALLOW_TEST_AUTH: ${GOV_ALLOW_TEST_AUTH:-0}
       GOOGLE_AUTH_TEST_SESSION_ID: ${GOOGLE_AUTH_TEST_SESSION_ID:-}
       GOOGLE_AUTH_TEST_SESSION_TOKEN: ${GOOGLE_AUTH_TEST_SESSION_TOKEN:-}

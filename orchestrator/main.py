@@ -90,25 +90,24 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS: the Auditor Workbench SPA is served by mcp-server (port 3000 in preview);
-# it needs to send credentials (Google-session cookie) to the FastAPI orchestrator.
+# CORS: the Auditor Workbench SPA is served by mcp-server (port 3000 in preview
+# and Docker Compose) and reaches the orchestrator via a same-origin `/api/*`
+# reverse proxy — so the browser never sends a cross-origin credentialed request
+# in the default deployment. CORS is therefore OFF by default (no middleware).
+#
+# Only enable CORS if the operator explicitly sets `CORS_ORIGINS` to a
+# comma-separated allow-list of trusted origins (never a wildcard with
+# credentials — the standard forbids it and starlette silently rejects it).
 _cors_env = os.environ.get("CORS_ORIGINS", "").strip()
-_cors_origins = [o.strip() for o in _cors_env.split(",") if o.strip()]
-if _cors_origins:
+if _cors_env:
+    _cors_origins = [o.strip() for o in _cors_env.split(",") if o.strip()]
+    if "*" in _cors_origins:
+        raise RuntimeError(
+            "CORS_ORIGINS=* with credentials is unsafe and violates the "
+            "browser fetch spec. List explicit origins instead.")
     app.add_middleware(
         CORSMiddleware,
         allow_origins=_cors_origins,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-else:
-    # Reflect any origin so preview URL + docker-compose + localhost all work.
-    # Combined with allow_credentials=True this echoes the request origin
-    # (starlette does not permit literal "*" with credentials).
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origin_regex=".*",
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

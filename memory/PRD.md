@@ -60,6 +60,44 @@ Reaudit impact matrix in AUDIT_PIPELINE.md §11; updatedPhaseInputs carries trig
 - Known pre-existing quirk (NOT introduced here): custom streamable-http transport
   terminates session on connection close (index.ts res.on("close")) — stdio is canonical.
 
+## 2026-02 iteration (part 6) — security audit findings resolved
+Second security audit (post part-5 hardening) surfaced 3 real issues that
+this pass fixes:
+
+- **SEC-001 CRITICAL** — the Google-Auth testing escape hatch was live in
+  the preview because `GOV_ALLOW_TEST_AUTH=1` was in `/app/backend/.env`
+  so pytest could pass. Anyone knowing the (documented) fixture id could
+  log in as `governance-admin`.
+  - Removed the 4 test-auth lines from `/app/backend/.env`.
+  - `orchestrator/google_auth.py::_test_auth_enabled()` now refuses the
+    branch when `NODE_ENV=production`.
+  - `orchestrator/config.py::_validate_google_auth_config()` refuses to
+    boot when `GOV_ALLOW_TEST_AUTH=1` + `NODE_ENV=production`.
+  - `tests/governance/conftest.py::pytest_configure` now injects the
+    fixture vars + restarts the backend for the pytest run only, then
+    strips them on `pytest_unconfigure`. Idempotent, self-cleaning.
+- **SEC-002 HIGH** — any Google account was being minted `governance-admin`.
+  - Added `_authorize_email()` gated by `GOOGLE_ALLOWED_EMAILS` +
+    `GOOGLE_ALLOWED_DOMAINS`. Format: `email=role` or `domain=role`,
+    with exact-email overriding domain match. Unlisted users get
+    `403 GOOGLE_USER_NOT_AUTHORIZED`.
+  - Empty allow-list + `NODE_ENV=production` + Google Sign-In enabled ⇒
+    orchestrator refuses to boot. Development emits a startup WARNING.
+- **SEC-003 MEDIUM** — CORS was reflecting arbitrary origins with credentials.
+  - `orchestrator/main.py` no longer installs CORSMiddleware when
+    `CORS_ORIGINS` is empty (rely on same-origin `/api/*` proxy from
+    mcp-server). Refuses to install a wildcard.
+- Added `/app/tests/governance/test_security_regressions.py` — 15 unit
+  tests covering SEC-001/002/003 to prevent silent regression.
+- Updated `.env.example`, `docker-compose.yml`, and `DEPLOYMENT.md § 4.1`
+  with the new allow-list env vars and hardening checklist entries.
+
+**Verification (iteration 6)**: 51/51 pytest (36 existing + 15 new
+security-regression) + 52/52 vitest all green. Live-probed SEC-003:
+`OPTIONS` from `https://evil.example.com` no longer receives any
+`Access-Control-Allow-*` header. Live-probed SEC-001: the previously
+CRITICAL fixture id now returns `401 GOOGLE_SESSION_INVALID`.
+
 ## 2026-02 iteration (part 5) — production hardening
 User asked to make the app production-ready before shipping. Delivered:
 

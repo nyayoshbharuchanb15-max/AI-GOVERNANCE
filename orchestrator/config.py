@@ -102,3 +102,37 @@ def validate_startup_config() -> None:
     """Call once on FastAPI startup. Refuses to boot with weak/missing secrets."""
     service_accounts()
     jwt_secret()
+    _validate_google_auth_config()
+
+
+def _validate_google_auth_config() -> None:
+    """Refuse to boot if the Google-Auth test escape hatch is enabled in prod
+    or if the allow-list is empty in a non-development environment."""
+    import logging
+    log = logging.getLogger("orchestrator.config")
+
+    node_env = os.environ.get("NODE_ENV", "").lower()
+    is_prod = node_env == "production"
+    hatch_on = os.environ.get("GOV_ALLOW_TEST_AUTH") == "1"
+
+    if is_prod and hatch_on:
+        raise InsecureConfigError(
+            "GOV_ALLOW_TEST_AUTH=1 is set in a production environment "
+            "(NODE_ENV=production). The Google-Auth fixture escape hatch "
+            "must be disabled in production. Unset the variable and restart.")
+
+    hide_google = os.environ.get("HIDE_GOOGLE_SIGNIN") == "1"
+    if hide_google:
+        return  # button is hidden → allow-list is moot
+
+    has_emails = bool(os.environ.get("GOOGLE_ALLOWED_EMAILS", "").strip())
+    has_domains = bool(os.environ.get("GOOGLE_ALLOWED_DOMAINS", "").strip())
+    if not has_emails and not has_domains:
+        msg = (
+            "Google Sign-In is enabled but GOOGLE_ALLOWED_EMAILS and "
+            "GOOGLE_ALLOWED_DOMAINS are both empty — ANY Google account "
+            "will be minted the default governance role. Set at least one "
+            "before exposing this deployment beyond a private network.")
+        if is_prod:
+            raise InsecureConfigError(msg)
+        log.warning("SECURITY: %s", msg)

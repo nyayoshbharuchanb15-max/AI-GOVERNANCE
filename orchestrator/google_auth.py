@@ -55,11 +55,22 @@ class GoogleSessionResponse(BaseModel):
     user: dict
 
 
+# Testing-only escape hatch. Refuses to activate unless BOTH:
+#   1. NODE_ENV is NOT "production" (production deployments never allow it).
+#   2. GOV_ALLOW_TEST_AUTH == "1" is explicitly set.
+# The fixture id must ALSO match GOOGLE_AUTH_TEST_SESSION_ID exactly. This
+# stack of guards makes accidentally leaving the hatch on in prod impossible.
+def _test_auth_enabled() -> bool:
+    if os.environ.get("NODE_ENV", "").lower() == "production":
+        return False
+    return os.environ.get("GOV_ALLOW_TEST_AUTH") == "1"
+
+
 async def _fetch_emergent_session(session_id: str) -> dict:
     """Look up the just-issued Emergent Auth session. One-shot lookup."""
     test_id = os.environ.get("GOOGLE_AUTH_TEST_SESSION_ID")
     test_tok = os.environ.get("GOOGLE_AUTH_TEST_SESSION_TOKEN")
-    if test_id and session_id == test_id and os.environ.get("GOV_ALLOW_TEST_AUTH") == "1":
+    if _test_auth_enabled() and test_id and session_id == test_id:
         return {
             "id": "test-user",
             "email": os.environ.get(
@@ -128,6 +139,69 @@ def _mint_governance_jwt(email: str, role: str) -> tuple[str, int, list[str]]:
     return token, ttl_seconds, scopes
 
 
+def _authorize_email(email: str) -> str:
+    """Enforce the operator-configured email/domain allow-list.
+
+    Returns the role to mint. Raises HTTPException(403) if the user is not
+    on the list.
+
+    Env var contract (both optional; if both empty, the legacy permissive
+    behaviour applies — every Google user is minted DEFAULT_ROLE — with a
+    startup warning emitted from validate_startup_config()):
+
+      GOOGLE_ALLOWED_EMAILS   comma-separated exact addresses, each optionally
+                              followed by "=<role>" to override the role.
+                              Example: "alice@acme.com=governance-admin,bob@acme.com=audit-engineer"
+      GOOGLE_ALLOWED_DOMAINS  comma-separated domain suffixes, each optionally
+                              followed by "=<role>".
+                              Example: "acme.com=audit-engineer"
+
+    Lookup order: exact-email first, then domain match. Unmatched addresses
+    are refused when either list is non-empty.
+    """
+    email_norm = email.strip().lower()
+    if not email_norm or "@" not in email_norm:
+        raise HTTPException(status_code=400, detail={
+            "code": "MALFORMED_EMAIL",
+            "message": "Emergent Auth returned an unparseable email",
+        })
+    domain = email_norm.rsplit("@", 1)[1]
+
+    def _parse_list(raw: str) -> dict[str, str]:
+        out: dict[str, str] = {}
+        for entry in raw.split(","):
+            entry = entry.strip().lower()
+            if not entry:
+                continue
+            key, _, role = entry.partition("=")
+            out[key.strip()] = (role.strip() or DEFAULT_ROLE)
+        return out
+
+    emails = _parse_list(os.environ.get("GOOGLE_ALLOWED_EMAILS", ""))
+    domains = _parse_list(os.environ.get("GOOGLE_ALLOWED_DOMAINS", ""))
+
+    if not emails and not domains:
+        # Legacy permissive mode. A startup warning is emitted elsewhere.
+        return DEFAULT_ROLE
+
+    if email_norm in emails:
+        role = emails[email_norm]
+    elif domain in domains:
+        role = domains[domain]
+    else:
+        raise HTTPException(status_code=403, detail={
+            "code": "GOOGLE_USER_NOT_AUTHORIZED",
+            "message": (f"'{email}' is not on the Google-Auth allow-list. "
+                        "Contact an administrator to be added."),
+        })
+    if role not in ROLE_SCOPES:
+        raise HTTPException(status_code=500, detail={
+            "code": "INVALID_ROLE_MAPPING",
+            "message": f"Configured role '{role}' is not a known governance role",
+        })
+    return role
+
+
 async def exchange_google_session(request: Request, response: Response) -> dict:
     session_id = request.headers.get("X-Session-ID") or request.headers.get(
         "x-session-id")
@@ -137,7 +211,7 @@ async def exchange_google_session(request: Request, response: Response) -> dict:
             "message": "X-Session-ID header is required",
         })
     user = await _fetch_emergent_session(session_id)
-    role = DEFAULT_ROLE  # per product decision: Google sign-in ⇒ governance-admin
+    role = _authorize_email(user["email"])
     expires_at = await _persist_session(user, role)
     access_token, ttl, scopes = _mint_governance_jwt(user["email"], role)
 

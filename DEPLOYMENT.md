@@ -130,8 +130,8 @@ etc.), empty values, or secrets shorter than 24 characters.
 ### 4.1 Google Sign-In (Emergent-managed OAuth)
 
 The Auditor Workbench ships a **Sign in with Google** button that uses
-Emergent's managed OAuth flow. When a user completes the flow, they are
-minted a `governance-admin` JWT and an httpOnly `governance_session`
+Emergent's managed OAuth flow. When a user completes the flow, the
+orchestrator mints a governance JWT and an httpOnly `governance_session`
 cookie (7-day TTL). Endpoints (all under `/api/v1`):
 
 - `POST /auth/google/session` — exchanges the returned `X-Session-ID` header
@@ -144,11 +144,42 @@ Hosts the flow needs to reach:
 - `auth.emergentagent.com` — user-facing OAuth screen
 - `demobackend.emergentagent.com` — session-data exchange (backend → backend)
 
-For **hardened air-gapped installs** where no external egress is allowed,
-set `HIDE_GOOGLE_SIGNIN=1` in `.env`. The button is then omitted from the
-login page entirely (compile-time injection into `window.__GOV_CONFIG__`),
-and the backend endpoints continue to exist but will never be reached from
-the SPA. All authentication then goes through the service-account flow.
+#### 4.1.1 Allow-list (mandatory in production)
+
+By default any Google-authenticated user is minted `governance-admin` — fine
+for a demo, unsafe for production. Configure the allow-list via env vars:
+
+```
+GOOGLE_ALLOWED_EMAILS=alice@acme.com=governance-admin,bob@acme.com=audit-engineer
+GOOGLE_ALLOWED_DOMAINS=acme.com=audit-engineer
+```
+
+Rules:
+- Exact-email matches take precedence over domain matches.
+- The `=role` suffix is optional; omitted → `governance-admin`.
+- Valid roles: `governance-admin`, `intake-officer`, `audit-engineer`, `certification-officer`.
+- Users not on either list receive `403 GOOGLE_USER_NOT_AUTHORIZED`.
+
+If both lists are empty AND `NODE_ENV=production`, the orchestrator
+**refuses to boot**. In development it emits a startup WARNING but
+continues (permissive mode).
+
+#### 4.1.2 Hardened air-gapped installs
+
+For deployments that forbid egress, set `HIDE_GOOGLE_SIGNIN=1` in `.env`.
+The button is then omitted from the login page entirely (compile-time
+injection into `window.__GOV_CONFIG__`), and the backend endpoints
+continue to exist but will never be reached from the SPA. All
+authentication then goes through the service-account flow.
+
+#### 4.1.3 Testing escape hatch (never in production)
+
+Two-gate guard: `GOV_ALLOW_TEST_AUTH=1` AND `NODE_ENV != production`.
+When both hold and a request arrives with
+`X-Session-ID: $GOOGLE_AUTH_TEST_SESSION_ID`, the orchestrator returns
+a synthetic user (`$GOOGLE_AUTH_TEST_EMAIL`) instead of contacting
+Emergent Auth. Boot **refuses** when `NODE_ENV=production` and the flag
+is on — that's the SEC-001 safeguard.
 
 ### 4.2 Ed25519 signing key
 
@@ -265,12 +296,15 @@ certificates by their `supersedes` link.
 - [ ] Ed25519 signing seed stored in an HSM / bind-mounted secret, not the repo.
 - [ ] MCP `/mcp` endpoint reachable only from trusted network segments.
 - [ ] MCP `MCP_ALLOWED_ORIGINS` set to the fully-qualified UI hostname.
-- [ ] `CORS_ORIGINS` set to the exact SPA origin (never `*` in production).
+- [ ] `CORS_ORIGINS` set to the **exact** SPA origin (never `*`; the
+      orchestrator refuses `*` at boot when combined with credentials).
 - [ ] `postgres`, `neo4j`, `redis` NOT exposed to any host port — network-namespace only.
-- [ ] `HIDE_GOOGLE_SIGNIN=1` if the compliance boundary forbids egress to
-      `auth.emergentagent.com` / `demobackend.emergentagent.com`.
-- [ ] `GOV_ALLOW_TEST_AUTH=0` (must be 0 in production; the fixture escape
-      hatch is refused when `NODE_ENV=production` is honoured downstream).
+- [ ] `HIDE_GOOGLE_SIGNIN=1` **OR** `GOOGLE_ALLOWED_EMAILS`/`GOOGLE_ALLOWED_DOMAINS`
+      populated (SEC-002). The orchestrator refuses to boot in production
+      if Google Sign-In is enabled with an empty allow-list.
+- [ ] `NODE_ENV=production` set — this locks out the Google-Auth testing
+      escape hatch (SEC-001) even if `GOV_ALLOW_TEST_AUTH=1` leaks in.
+- [ ] `GOV_ALLOW_TEST_AUTH=0` (must be 0 in `.env`).
 - [ ] Backup snapshots stored encrypted (age / gpg / KMS).
 - [ ] Audit logs (structured JSON) shipped to an append-only SIEM.
 - [ ] Regular reaudit trigger cadence configured for each certified model.
