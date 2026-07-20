@@ -35,92 +35,126 @@ The preview pod uses the bare-metal mode (see `PRD.md`).
 
 ```bash
 git clone <this repo> ai-governance && cd ai-governance
-cp .env.example .env                # fill in the secrets (see § 4)
-docker compose up -d
-docker compose ps                    # confirm postgres, neo4j, redis, cert-signer,
-                                     # orchestrator and mcp-server are healthy
+
+# 1. Generate a production-ready .env with fresh 32-byte secrets.
+#    The orchestrator refuses to boot with weak/unset values.
+bash scripts/gen-secrets.sh > .env
+chmod 600 .env
+
+# 2. (Optional) Edit .env to set GOVERNANCE_PUBLIC_BASE_URL, MCP_ALLOWED_ORIGINS,
+#    CORS_ORIGINS, HIDE_GOOGLE_SIGNIN, etc.
+
+# 3. Pre-seed the Ed25519 signer key (once).
+docker volume create cert-keys
+docker run --rm -v cert-keys:/keys alpine sh -c \
+  'dd if=/dev/urandom of=/keys/ed25519.seed bs=32 count=1 && chmod 600 /keys/ed25519.seed'
+
+# 4. Bring the stack up. Postgres/Neo4j/Redis are internal only (no host port).
+docker compose up -d --build
+docker compose ps
 ```
 
-The default compose stack exposes:
+The compose stack exposes only two host ports:
 
 | Service          | Container port | Host port | Notes |
 |------------------|---------------:|----------:|-------|
-| orchestrator     | 8010           | 8010      | FastAPI orchestrator (JWT auth) |
-| mcp-server       | 3010           | 3010      | MCP Streamable HTTP + Auditor Workbench UI |
-| cert-signer      | 8020           | *(private)* | Ed25519 VC 2.0 signer — private-only network |
-| postgres         | 5432           | *(private)* | Evidence store — no host port |
-| neo4j            | 7687           | *(private)* | Bolt — no host port |
-| redis            | 6379           | *(private)* | Event fabric — no host port |
+| orchestrator     | 8010           | 8010      | FastAPI orchestrator + `/api/v1` |
+| mcp-server       | 3000           | 3000      | Auditor Workbench SPA + MCP transport + same-origin `/api/*` proxy → orchestrator |
+| cert-signer      | 8020           | *(private)* | Ed25519 VC 2.0 signer |
+| postgres         | 5432           | *(private)* | Evidence store |
+| neo4j            | 7687           | *(private)* | Bolt / lineage graph |
+| redis            | 6379           | *(private)* | Event fabric |
 
-Only the orchestrator and MCP server bind to host ports. All persistent state
-lives in named volumes: `pg_data`, `neo4j_data`, `redis_data`.
+The SPA (`http://localhost:3000/`) makes `/api/v1/*` calls to the mcp-server,
+which reverse-proxies them into the `orchestrator` container over the private
+`governance-net` network. This means the browser never has to reach port
+8010 directly and CORS is a non-issue for same-origin deployments.
 
 ### Smoke test
 
 ```bash
+# 1. Overall health (from the host)
 curl -s http://localhost:8010/api/v1/health | jq
+
+# 2. Same health path through the SPA proxy (should match)
+curl -s http://localhost:3000/api/v1/health | jq
+
+# 3. Full audit walk via governance-admin service account
+source .env
 TOKEN=$(curl -s -X POST http://localhost:8010/api/v1/auth/token \
   -H 'Content-Type: application/json' \
-  -d '{"clientId":"governance-admin","clientSecret":"<from .env>"}' | jq -r .accessToken)
+  -d "{\"clientId\":\"governance-admin\",\"clientSecret\":\"$GOV_ADMIN_SECRET\"}" \
+  | jq -r .accessToken)
 curl -s http://localhost:8010/api/v1/runs -H "Authorization: Bearer $TOKEN" | jq .
 ```
 
-Open the Auditor Workbench at http://localhost:3010/.
+Open the Auditor Workbench at **http://localhost:3000/**. Sign in with a
+service-account role card (paste the corresponding `GOV_*_SECRET` from
+your `.env`) or click **Sign in with Google** if enabled (see § 4.1).
+
+### Regression test against your compose stack
+
+```bash
+export GOVERNANCE_API_URL=http://localhost:8010
+export $(grep '^GOV_\|^GOVERNANCE_JWT' .env | xargs)
+python -m pytest tests/governance -v
+# Expect: 36 passed (28 pipeline/artifacts/gap-analysis + 8 Google Auth)
+```
 
 ---
 
 ## 4. Environment variables
 
 All secrets and connection strings are supplied through environment variables —
-never committed defaults. `.env.example` documents the required keys:
+no hard-coded fallbacks in the codebase or the compose file. `.env.example`
+is the canonical reference; `scripts/gen-secrets.sh` produces a ready-to-use
+`.env` with fresh 32-byte secrets for every `KEY=__GENERATE__` line.
 
-```
-POSTGRES_USER=governance
-POSTGRES_PASSWORD=<strong secret>
-POSTGRES_DB=evidence_store
-POSTGRES_HOST=postgres
-POSTGRES_PORT=5432
+Required at boot (orchestrator refuses to start otherwise):
 
-NEO4J_URI=bolt://neo4j:7687
-NEO4J_USER=neo4j
-NEO4J_PASSWORD=<strong secret>
+| Env var | Purpose | Generation |
+|---|---|---|
+| `POSTGRES_PASSWORD` | Postgres superuser | `openssl rand -base64 32` |
+| `NEO4J_PASSWORD` | Neo4j auth | `openssl rand -base64 32` |
+| `GOVERNANCE_JWT_SECRET` | HS256 signing key | `python3 -c "import secrets;print(secrets.token_urlsafe(32))"` |
+| `GOV_ADMIN_SECRET` | governance-admin service account | *(same)* |
+| `GOV_INTAKE_SECRET` | intake-officer service account | *(same)* |
+| `GOV_AUDIT_SECRET` | audit-engineer service account | *(same)* |
+| `GOV_CERT_SECRET` | certification-officer service account | *(same)* |
+| `GOVERNANCE_CLIENT_SECRET` | mcp-server → orchestrator (usually `=${GOV_ADMIN_SECRET}`) | *(same)* |
 
-REDIS_URL=redis://redis:6379/0
+Startup validator (`orchestrator/config.py`) refuses to boot with any of the
+old dev-secret strings (`govern-admin-secret-dev`, `intake-officer-secret-dev`,
+etc.), empty values, or secrets shorter than 24 characters.
 
-# JWT signing secret for the orchestrator (HS256).
-GOVERNANCE_JWT_SECRET=<32+ bytes of random>
+### 4.1 Google Sign-In (Emergent-managed OAuth)
 
-# Client-credentials service accounts (comma-separated pairs).
-# Rotate quarterly and enforce a stronger secret in production.
-GOVERNANCE_CLIENTS=governance-admin:<secret>|governance-admin,intake-officer:<secret>|intake-officer,audit-engineer:<secret>|audit-engineer,certification-officer:<secret>|certification-officer
+The Auditor Workbench ships a **Sign in with Google** button that uses
+Emergent's managed OAuth flow. When a user completes the flow, they are
+minted a `governance-admin` JWT and an httpOnly `governance_session`
+cookie (7-day TTL). Endpoints (all under `/api/v1`):
 
-# Ed25519 signing key — kept in a bind-mounted secret file
-CERT_SIGNER_SEED_PATH=/var/lib/governance/keys/ed25519.seed
-CERT_SIGNER_URL=http://cert-signer:8020   # empty in preview → embedded
+- `POST /auth/google/session` — exchanges the returned `X-Session-ID` header
+  for a governance JWT + cookie
+- `GET  /auth/me` — returns the current Google-authenticated user (cookie
+  or `Authorization: Bearer <session_token>`)
+- `POST /auth/logout` — invalidates the DB session row and clears the cookie
 
-# MCP transport
-MCP_TRANSPORT=streamable-http
-MCP_HTTP_HOST=0.0.0.0
-PORT=3010
-GOVERNANCE_API_URL=http://orchestrator:8010
-```
+Hosts the flow needs to reach:
+- `auth.emergentagent.com` — user-facing OAuth screen
+- `demobackend.emergentagent.com` — session-data exchange (backend → backend)
 
-Copy `/app/.env.example` to `.env` and fill in strong secrets. Never commit
-this file.
+For **hardened air-gapped installs** where no external egress is allowed,
+set `HIDE_GOOGLE_SIGNIN=1` in `.env`. The button is then omitted from the
+login page entirely (compile-time injection into `window.__GOV_CONFIG__`),
+and the backend endpoints continue to exist but will never be reached from
+the SPA. All authentication then goes through the service-account flow.
 
-### Ed25519 signing key
+### 4.2 Ed25519 signing key
 
-The signer expects a 32-byte seed at `CERT_SIGNER_SEED_PATH`. Generate one:
-
-```bash
-mkdir -p /var/lib/governance/keys
-python3 -c "import os,sys; sys.stdout.buffer.write(os.urandom(32))" \
-  > /var/lib/governance/keys/ed25519.seed
-chmod 600 /var/lib/governance/keys/ed25519.seed
-```
-
-Back this file up to your HSM / vault — losing it invalidates all issued
-certificates.
+The signer expects a 32-byte seed at `CERT_KEY_FILE`. See Step 3 above for
+the pre-seeding command. Back this file up to your HSM / vault — losing it
+invalidates all issued certificates.
 
 ---
 
@@ -139,6 +173,7 @@ Current PostgreSQL migrations:
 | 002 | `002_governance.sql` | Core: runs, phase results, certificates, events, monitoring |
 | 003 | `003_artifacts.sql` | Evidence artifacts + per-phase article citations |
 | 004 | `004_gap_analysis.sql` | Extracted text + document gap findings |
+| 005 | `005_google_auth.sql` | Emergent-managed Google Sign-In sessions (httpOnly cookie backing store) |
 
 To force a rerun (e.g. after restoring a backup): drop the corresponding tables
 and restart the orchestrator; the migration runner will re-apply any missing
@@ -223,12 +258,19 @@ certificates by their `supersedes` link.
 
 ## 10. Security hardening checklist
 
+- [ ] `.env` generated via `scripts/gen-secrets.sh` (32-byte URL-safe tokens);
+      no `KEY=__GENERATE__` line remains.
 - [ ] JWT secret ≥ 32 random bytes; rotated quarterly.
 - [ ] Service-account passwords rotated on the same cadence.
 - [ ] Ed25519 signing seed stored in an HSM / bind-mounted secret, not the repo.
 - [ ] MCP `/mcp` endpoint reachable only from trusted network segments.
 - [ ] MCP `MCP_ALLOWED_ORIGINS` set to the fully-qualified UI hostname.
+- [ ] `CORS_ORIGINS` set to the exact SPA origin (never `*` in production).
 - [ ] `postgres`, `neo4j`, `redis` NOT exposed to any host port — network-namespace only.
+- [ ] `HIDE_GOOGLE_SIGNIN=1` if the compliance boundary forbids egress to
+      `auth.emergentagent.com` / `demobackend.emergentagent.com`.
+- [ ] `GOV_ALLOW_TEST_AUTH=0` (must be 0 in production; the fixture escape
+      hatch is refused when `NODE_ENV=production` is honoured downstream).
 - [ ] Backup snapshots stored encrypted (age / gpg / KMS).
 - [ ] Audit logs (structured JSON) shipped to an append-only SIEM.
 - [ ] Regular reaudit trigger cadence configured for each certified model.

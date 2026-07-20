@@ -60,6 +60,40 @@ Reaudit impact matrix in AUDIT_PIPELINE.md §11; updatedPhaseInputs carries trig
 - Known pre-existing quirk (NOT introduced here): custom streamable-http transport
   terminates session on connection close (index.ts res.on("close")) — stdio is canonical.
 
+## 2026-02 iteration (part 5) — production hardening
+User asked to make the app production-ready before shipping. Delivered:
+
+- `.env.example` **overwritten** — every secret is now marked `__GENERATE__`
+  (never a weak default). Grouped by concern (Postgres / Neo4j / Redis /
+  Orchestrator / MCP / Google Sign-In) with inline docs on each var.
+- `scripts/gen-secrets.sh` — new helper that reads `.env.example` and emits
+  a ready-to-use `.env` on stdout with fresh 32-byte URL-safe tokens for
+  every `KEY=__GENERATE__` line. Documentation blocks are preserved.
+- `HIDE_GOOGLE_SIGNIN` flag — compile-time injection into
+  `window.__GOV_CONFIG__` by the mcp-server shell. When `=1`, the Google
+  button is entirely omitted from the login page (no code path reaches
+  `auth.emergentagent.com`). For hardened air-gapped installs.
+- `mcp-server/src/index.ts` — added a same-origin `/api/*` reverse proxy
+  from the workbench (port 3000) to the orchestrator (port 8010). Preview
+  environment ingress continues to route the same paths; Docker Compose
+  now works without a separate ingress layer.
+- `docker-compose.yml` — every default value stripped. Compose refuses to
+  start (`?POSTGRES_PASSWORD is required (run scripts/gen-secrets.sh)`) when
+  a required var is missing. Postgres/Neo4j/Redis host ports removed —
+  only orchestrator:8010 and mcp-server:3000 are exposed. Google Sign-In
+  env vars (`HIDE_GOOGLE_SIGNIN`, `GOV_ALLOW_TEST_AUTH`,
+  `GOOGLE_AUTH_TEST_*`) wired through both `orchestrator` and `mcp-server`.
+- `DEPLOYMENT.md` — § 3 rewritten with the gen-secrets step, the
+  reverse-proxy behaviour, the seed-key command, and a regression-test
+  block; § 4.1 documents Google Sign-In egress + hide flag; § 5 adds
+  migration 005; § 10 hardening checklist updated (gen-secrets + Google
+  Sign-In toggle + `GOV_ALLOW_TEST_AUTH=0` line).
+
+**Verification**: 36/36 pytest + 52/52 vitest still green after the proxy
+and shell-injection changes. Both `HIDE_GOOGLE_SIGNIN=1` and unset
+verified end-to-end (HTML shell emits `hideGoogleSignIn: true|false` and
+the SPA correctly hides / shows the button).
+
 ## 2026-02 iteration (part 4) — security-fix test refactor + Emergent Google Sign-In
 User asked for two things: (1) verify the security patches from part 3 (hardcoded
 default secrets removed, VC pubkey pinned, atomic cert revocation) actually stick
@@ -285,11 +319,14 @@ neo4j/governance_secret, started via `neo4j start`). After pod restart: `service
 start; redis-server --daemonize yes; neo4j start` then restart supervisor backend/frontend.
 
 ## Backlog / next
-- DONE (2026-02, part 4): security-fix test-suite refactor (env-sourced
-  CREDS from conftest.py) + Emergent-managed Google Sign-In flow
-  (workbench "Sign in with Google" button, backend
-  `/api/v1/auth/google/session|me|logout`, HttpOnly cookie + governance JWT,
-  Google-authenticated users → `governance-admin`).
+- DONE (2026-02, part 5): production hardening — `.env.example` with
+  `__GENERATE__` markers + `scripts/gen-secrets.sh` helper; `HIDE_GOOGLE_SIGNIN`
+  flag for air-gapped installs; same-origin `/api/*` reverse proxy from
+  mcp-server so the SPA works in Docker Compose without an ingress layer;
+  `docker-compose.yml` stripped of weak defaults (fails fast when secrets
+  are missing); `DEPLOYMENT.md` rewritten (Docker Compose walkthrough,
+  Google Sign-In egress note, updated hardening checklist).
+- DONE (2026-02, part 4): security-fix test-suite refactor + Google Sign-In.
 - DONE (2026-02, part 3): data-testid coverage across the SPA + artifact
   detail modal wired to `GET /api/v1/artifacts/{id}` + null-guards on stale
   async render callbacks + supervisor adoption of Postgres/Neo4j/Redis so

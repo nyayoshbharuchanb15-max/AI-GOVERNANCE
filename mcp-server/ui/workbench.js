@@ -582,11 +582,16 @@ route("login", async (app) => {
         "On-premise AI compliance orchestration. Sign in with a service account — a human auditor drives the workbench, or an AI agent drives the identical pipeline via the MCP endpoint. ",
         h("b", null, "Client secrets are held in your password vault"), " and are never shipped in the browser.",
       ),
-      h("button", { class: "google-btn", ...tid("login-google-btn"), onclick: googleSignIn, type: "button" },
+      // Google sign-in is optional — hidden entirely on hardened air-gapped
+      // installs via HIDE_GOOGLE_SIGNIN=1 (injected into window.__GOV_CONFIG__
+      // by the server shell).
+      (window.__GOV_CONFIG__ && window.__GOV_CONFIG__.hideGoogleSignIn) ? null : h(
+        "button", { class: "google-btn", ...tid("login-google-btn"), onclick: googleSignIn, type: "button" },
         h("span", { class: "g-icon", "aria-hidden": "true" }, "G"),
         h("span", null, "Sign in with Google"),
       ),
-      h("div", { class: "or-divider" }, h("span", null, "or continue with a service account")),
+      (window.__GOV_CONFIG__ && window.__GOV_CONFIG__.hideGoogleSignIn) ? null : h(
+        "div", { class: "or-divider" }, h("span", null, "or continue with a service account")),
       ...ROLES.map(r => h("button", { class: "role-btn", ...tid(testidFor("login-role", r.clientId)),
         onclick: () => { custom.id.value = r.clientId; custom.sec.focus(); toast(`Prefilled clientId '${r.clientId}' — paste the secret from your vault`, "info", 3500); } },
         h("div", { class: "role-name" }, r.name),

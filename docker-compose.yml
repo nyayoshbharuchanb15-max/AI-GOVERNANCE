@@ -12,9 +12,10 @@ volumes:
 
 services:
   # ╔══════════════════════════════════════════════════════════════════╗
-  # ║  WARNING: All default passwords/secrets below are for local     ║
-  # ║  demonstration ONLY. Override every secret via .env before      ║
-  # ║  any non-local deployment. See .env.example for all options.    ║
+  # ║  All secrets are REQUIRED from the .env file (no fallbacks).     ║
+  # ║  Generate a production-ready .env with:                          ║
+  # ║      bash scripts/gen-secrets.sh > .env && chmod 600 .env        ║
+  # ║  See DEPLOYMENT.md § 3 for the full checklist.                   ║
   # ╚══════════════════════════════════════════════════════════════════╝
   # ─── PostgreSQL Evidence Store ──────────────────────────────────
   postgres:
@@ -22,18 +23,18 @@ services:
     container_name: compliance-stack-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-governance}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-governance_secret}
-      POSTGRES_DB: ${POSTGRES_DB:-evidence_store}
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required (run scripts/gen-secrets.sh)}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+    # Postgres port intentionally NOT exposed to the host — access it via
+    # `docker compose exec postgres psql ...` for backups/admin.
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     networks:
       - governance-net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-governance} -d ${POSTGRES_DB:-evidence_store}"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       retries: 10
 
@@ -43,22 +44,18 @@ services:
     container_name: compliance-stack-neo4j
     restart: unless-stopped
     environment:
-      # ╔════════════════════════════════════════════════════════════╗
-      # ║  WARNING: Demo default password — override in .env       ║
-      # ╚════════════════════════════════════════════════════════════╝
-      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-governance_secret}
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:?NEO4J_PASSWORD is required (run scripts/gen-secrets.sh)}
       NEO4J_PLUGINS: '["apoc"]'
       NEO4J_dbms_security_procedures_unrestricted: "apoc.*"
-    ports:
-      - "7687:7687"   # Bolt
-      - "7474:7474"   # HTTP browser
+    # Neo4j Bolt/HTTP intentionally NOT exposed — use
+    # `docker compose exec neo4j cypher-shell -u neo4j -p $$NEO4J_PASSWORD`.
     volumes:
       - neo4j-data:/data
       - ./cypher/init.cypher:/init.cypher:ro
     networks:
       - governance-net
     healthcheck:
-      test: ["CMD-SHELL", "cypher-shell -u neo4j -p ${NEO4J_PASSWORD:-governance_secret} 'RETURN 1;'"]
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p $${NEO4J_PASSWORD} 'RETURN 1;'"]
       interval: 10s
       retries: 10
 
@@ -67,8 +64,7 @@ services:
     image: redis:7-alpine
     container_name: compliance-stack-redis
     restart: unless-stopped
-    ports:
-      - "6379:6379"
+    # Redis intentionally NOT exposed to the host.
     volumes:
       - redis-data:/data
     networks:
@@ -152,23 +148,32 @@ services:
       cert-signer:
         condition: service_healthy
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-governance}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-governance_secret}
-      POSTGRES_DB: ${POSTGRES_DB:-evidence_store}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       NEO4J_URI: bolt://neo4j:7687
       NEO4J_USER: neo4j
-      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-governance_secret}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD}
       REDIS_URL: redis://redis:6379/0
-      GOVERNANCE_JWT_SECRET: ${GOVERNANCE_JWT_SECRET:-governance-jwt-secret-dev}
+      GOVERNANCE_JWT_SECRET: ${GOVERNANCE_JWT_SECRET:?GOVERNANCE_JWT_SECRET is required (run scripts/gen-secrets.sh)}
       GOVERNANCE_TOKEN_TTL_MINUTES: ${GOVERNANCE_TOKEN_TTL_MINUTES:-60}
-      GOV_ADMIN_SECRET: ${GOV_ADMIN_SECRET:-govern-admin-secret-dev}
-      GOV_INTAKE_SECRET: ${GOV_INTAKE_SECRET:-intake-officer-secret-dev}
-      GOV_AUDIT_SECRET: ${GOV_AUDIT_SECRET:-audit-engineer-secret-dev}
-      GOV_CERT_SECRET: ${GOV_CERT_SECRET:-certification-officer-secret-dev}
+      GOV_ADMIN_SECRET: ${GOV_ADMIN_SECRET:?GOV_ADMIN_SECRET is required}
+      GOV_INTAKE_SECRET: ${GOV_INTAKE_SECRET:?GOV_INTAKE_SECRET is required}
+      GOV_AUDIT_SECRET: ${GOV_AUDIT_SECRET:?GOV_AUDIT_SECRET is required}
+      GOV_CERT_SECRET: ${GOV_CERT_SECRET:?GOV_CERT_SECRET is required}
+      GOV_TRUSTED_ISSUER_DIDS: ${GOV_TRUSTED_ISSUER_DIDS:-}
       CERT_SIGNER_URL: http://cert-signer:8020
       GOVERNANCE_PUBLIC_BASE_URL: ${GOVERNANCE_PUBLIC_BASE_URL:-http://localhost:8010}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      # Google Sign-In (Emergent-managed OAuth). Requires egress to
+      # auth.emergentagent.com + demobackend.emergentagent.com. Fully hidden
+      # by mcp-server if HIDE_GOOGLE_SIGNIN=1.
+      GOV_ALLOW_TEST_AUTH: ${GOV_ALLOW_TEST_AUTH:-0}
+      GOOGLE_AUTH_TEST_SESSION_ID: ${GOOGLE_AUTH_TEST_SESSION_ID:-}
+      GOOGLE_AUTH_TEST_SESSION_TOKEN: ${GOOGLE_AUTH_TEST_SESSION_TOKEN:-}
+      GOOGLE_AUTH_TEST_EMAIL: ${GOOGLE_AUTH_TEST_EMAIL:-}
     ports:
       - "8010:8010"
     networks:
@@ -194,7 +199,7 @@ services:
       interval: 15s
       retries: 5
 
-  # ─── TypeScript MCP Server ─────────────────────────────────────
+  # ─── TypeScript MCP Server (Auditor Workbench SPA + MCP transport) ─
   mcp-server:
     build:
       context: ./mcp-server
@@ -210,19 +215,18 @@ services:
       PYTHON_BACKEND_URL: http://python-backend:8000
       GOVERNANCE_API_URL: http://orchestrator:8010
       GOVERNANCE_CLIENT_ID: ${GOVERNANCE_CLIENT_ID:-governance-admin}
-      GOVERNANCE_CLIENT_SECRET: ${GOV_ADMIN_SECRET:-govern-admin-secret-dev}
-      NODE_ENV: production
+      GOVERNANCE_CLIENT_SECRET: ${GOVERNANCE_CLIENT_SECRET:?GOVERNANCE_CLIENT_SECRET is required (usually =${GOV_ADMIN_SECRET})}
+      NODE_ENV: ${NODE_ENV:-production}
       AUTH_TOKEN: ${AUTH_TOKEN:-}
-      MCP_TRANSPORT: ${MCP_TRANSPORT:-stdio}
+      MCP_TRANSPORT: ${MCP_TRANSPORT:-streamable-http}
+      MCP_HTTP_HOST: ${MCP_HTTP_HOST:-0.0.0.0}
       PORT: ${MCP_PORT:-3000}
+      MCP_ALLOWED_ORIGINS: ${MCP_ALLOWED_ORIGINS:-}
+      # Hide the Google Sign-In button entirely on air-gapped installs.
+      HIDE_GOOGLE_SIGNIN: ${HIDE_GOOGLE_SIGNIN:-0}
     ports:
-      - "${MCP_PORT:-3000}:${MCP_PORT:-3000}"   # SSE / Streamable HTTP port
-    # MCP supports all three transport modes:
-    #   - stdio: Claude Desktop integration (default)
-    #   - sse: Web-based MCP clients via GET /sse + POST /messages
-    #   - streamable-http: Modern MCP clients via POST/GET/DELETE /mcp
-    # Set MCP_TRANSPORT=streamable-http or MCP_TRANSPORT=sse in .env to enable
-    stdin_open: true   # stdio mode for Claude Desktop integration
+      - "${MCP_PORT:-3000}:${MCP_PORT:-3000}"
+    stdin_open: true
     tty: true
     command: ["node", "dist/index.js"]
     healthcheck:

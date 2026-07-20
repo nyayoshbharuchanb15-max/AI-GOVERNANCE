@@ -31,6 +31,7 @@ export function getWorkbenchCss(): string {
 }
 
 export function renderWorkbenchShell(version: string): string {
+  const hideGoogle = process.env.HIDE_GOOGLE_SIGNIN === "1" ? "true" : "false";
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -49,6 +50,7 @@ export function renderWorkbenchShell(version: string): string {
     </div>
   </div>
 </div>
+<script>window.__GOV_CONFIG__ = { hideGoogleSignIn: ${hideGoogle} };</script>
 <script src="/assets/workbench.js" type="module"></script>
 </body>
 </html>`;
