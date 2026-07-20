@@ -1,0 +1,30 @@
+{
+  "summary": "Iteration 4 verified: env recovery (health=ok, all 4 services connected, governance-postgres/neo4j/redis supervised), backend regression 28/28 pytest + 52/52 vitest all pass, artifact-detail endpoint returns 404 with ARTIFACT_NOT_FOUND for missing IDs, and the new artifact-detail modal is fully wired end-to-end. Clicking a row in the run-detail artifact table opens a modal with all required testids (name, extraction-status, gap-score, gap-counts, cited-phases, gap-findings, extracted-text), Escape closes the modal, and drill-through from timeline gap-rows and citation-rows also opens the modal. DPIA demo artifact shows exactly 7 GDPR gap findings with extraction status 'extracted' and the expected 'Data Protection Impact Assessment' content. All sidebar/login/dashboard/wizard/run-detail/verify/events/reaudit testids present. Signout works.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "console_errors": [
+      {"file": "workbench.js:570", "error": "TypeError: Cannot read properties of null (reading 'replaceWith') — stale render/refresh timer fires after navigating away from a page", "priority": "LOW", "impact": "non-blocking; pollutes console but does not affect UX"},
+      {"file": "workbench.js:638", "error": "TypeError: Cannot read properties of null (reading 'querySelector') on runs-tbl section-body — same stale-timer pattern after route change", "priority": "LOW"},
+      {"file": "workbench.js:762", "error": "TypeError: Cannot read properties of null (reading 'querySelector') on ev-recent — events refresh timer keeps firing after leaving events page", "priority": "LOW"}
+    ]
+  },
+  "test_report_links": ["/app/test_reports/pytest/iteration_4_results.xml", "/app/tests/governance/", "/app/mcp-server/src/__tests__/"],
+  "action_items": [
+    "Optional: guard the periodic refresh callbacks in workbench.js (lines 570, 638, 762) with a null-check on the parent DOM node, or clear the timer on route change, to eliminate the three stale-render TypeErrors observed on navigation."
+  ],
+  "critical_code_review_comments": [
+    "Periodic refresh loops (runs list, events list, dashboard) do not clear when the user navigates away, leading to console TypeErrors when the section-body DOM node no longer exists. Wrap DOM lookups in `if (el) { ... }` or track/clear intervals in the router transition.",
+    "artifact-detail modal opens asynchronously (fetches /api/v1/artifacts/{id}); tests must wait for `[data-testid=\"artifact-detail-name\"]` (not just `[data-testid=\"modal\"]`) to avoid race conditions — worth documenting for downstream integrators."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "governance-admin / govern-admin-secret-dev (used successfully)",
+  "seed_data_creation": "One-click demo run triggered via wizard-run-demo-btn produced a completed run with DPIA/ROPA/etc artifacts and issued certificate.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Modal loads async — always wait for [data-testid='artifact-detail-name'] rather than just [data-testid='modal']. DPIA demo artifact yields exactly 7 gap findings (Art. 35(7)(a)–(d), 35(2), 5(1)(e), 6). Runs table on Audit Runs page may briefly be empty right after navigation; wait ~1s or query [data-testid^='run-row-'] with a retry.",
+  "rca of the issue": "Not applicable — no blocking issues found. Three console TypeErrors are all the same pattern: periodic refresh callbacks (setInterval) inside page renderers continue firing after the user navigates to a different route, at which point the target DOM node (section-body) has been replaced. Root cause: intervals are not tracked/cleared on router transition. Mitigation: either null-guard the DOM lookup or clear the interval in the route-change handler."
+}

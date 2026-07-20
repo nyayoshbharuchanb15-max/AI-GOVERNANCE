@@ -58,15 +58,129 @@ const h = (tag, attrs = {}, ...children) => {
 };
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const short = (s, n = 10) => (s || "").length > n ? s.slice(0, n) + "…" : (s || "");
+
+// data-testid helper (kebab-case identifiers unique per interactive element).
+const tid = (id) => ({ "data-testid": id });
+const testidFor = (kind, key) => `${kind}-${String(key).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
 const fmtDate = (s) => s ? new Date(s).toISOString().replace("T", " ").slice(0, 19) + " UTC" : "—";
 
 // ─── Toasts ─────────────────────────────────────────────────────
-const toaster = { el: null, ensure() { if (!this.el) { this.el = h("div", { class: "toasts" }); document.body.appendChild(this.el); } } };
+const toaster = { el: null, ensure() { if (!this.el) { this.el = h("div", { class: "toasts", ...tid("toast-container") }); document.body.appendChild(this.el); } } };
 function toast(msg, kind = "info", ms = 4000) {
   toaster.ensure();
-  const t = h("div", { class: "toast " + kind }, msg);
+  const t = h("div", { class: "toast " + kind, ...tid(`toast-${kind}`) }, msg);
   toaster.el.appendChild(t);
   setTimeout(() => t.remove(), ms);
+}
+
+// ─── Modal ──────────────────────────────────────────────────────
+function openModal(title, bodyEl, footerEl) {
+  const back = h("div", { class: "modal-back", ...tid("modal-backdrop"),
+    onclick: (e) => { if (e.target === back) back.remove(); } });
+  const modal = h("div", { class: "modal", ...tid("modal") },
+    h("div", { class: "modal-head" },
+      h("div", { style: "font-size: 13px; font-weight: 600; color: var(--ink);", ...tid("modal-title") }, title),
+      h("button", { class: "btn ghost sm", ...tid("modal-close-btn"), onclick: () => back.remove() }, "✕"),
+    ),
+    h("div", { class: "modal-body", ...tid("modal-body") }, bodyEl),
+    footerEl ? h("div", { class: "modal-foot" }, footerEl) : null,
+  );
+  back.appendChild(modal);
+  document.body.appendChild(back);
+  // Close on Escape
+  const onKey = (e) => { if (e.key === "Escape") { back.remove(); document.removeEventListener("keydown", onKey); } };
+  document.addEventListener("keydown", onKey);
+  return back;
+}
+
+// ─── Artifact detail modal ──────────────────────────────────────
+async function openArtifactDetail(artifactId, contextRun) {
+  const spinner = h("div", { class: "empty", ...tid("artifact-detail-loading") }, "Loading artifact…");
+  const back = openModal("Artifact detail", spinner);
+  let art;
+  try {
+    art = await api(`/api/v1/artifacts/${encodeURIComponent(artifactId)}`);
+  } catch (e) {
+    spinner.replaceWith(h("div", { class: "err", ...tid("artifact-detail-error") }, "Failed to load: " + e.message));
+    return;
+  }
+
+  const gapCount = { blocker: 0, warning: 0, present: 0, partial: 0, pending: 0 };
+  for (const g of art.gapFindings || []) {
+    if (g.verdict === "gap") gapCount[g.severity === "blocker" ? "blocker" : "warning"] += 1;
+    else if (g.verdict in gapCount) gapCount[g.verdict] += 1;
+  }
+  // Which phases cited this artifact (from the caller-provided run context)
+  const citedPhases = contextRun ? [...new Set(
+    (contextRun.citations || [])
+      .filter(c => c.artifactId === artifactId)
+      .map(c => c.phaseKey)
+  )] : [];
+
+  const body = h("div", { ...tid("artifact-detail-body") },
+    h("div", { class: "cert-header", style: "margin-bottom: 18px;" },
+      h("div", { class: "cert-title", ...tid("artifact-detail-name") }, art.name),
+      h("div", { class: "cert-id" }, "artifactId ", art.artifactId, " · type ", art.type, art.mimeType ? " · " + art.mimeType : ""),
+      h("div", { class: "cert-meta", style: "grid-template-columns: repeat(4, 1fr);" },
+        h("div", null, h("div", { class: "cm-k" }, "Extraction"),
+          h("div", { class: "cm-v", ...tid("artifact-detail-extraction-status") },
+            h("span", { class: "pill " + (art.extractionStatus === "extracted" ? "ok" : art.extractionStatus === "pending" ? "muted" : "warning") }, art.extractionStatus || "—"),
+          ),
+        ),
+        h("div", null, h("div", { class: "cm-k" }, "Gap score"),
+          h("div", { class: "cm-v acc", ...tid("artifact-detail-gap-score") }, art.gapScore == null ? "—" : (art.gapScore * 100).toFixed(0) + "%")),
+        h("div", null, h("div", { class: "cm-k" }, "Blocker / warning gaps"),
+          h("div", { class: "cm-v", ...tid("artifact-detail-gap-counts") },
+            h("span", { style: `color: var(--${gapCount.blocker > 0 ? "red" : "acc"})` }, gapCount.blocker),
+            " / ",
+            h("span", { style: `color: var(--${gapCount.warning > 0 ? "amber" : "ink-dim"})` }, gapCount.warning),
+          ),
+        ),
+        h("div", null, h("div", { class: "cm-k" }, "Cited in"),
+          h("div", { class: "cm-v", ...tid("artifact-detail-cited-phases") }, citedPhases.length ? citedPhases.map(p => h("span", { class: "tag" }, p)) : h("span", { class: "pill muted" }, "not cited"))),
+      ),
+      art.extractionNote ? h("div", { style: "margin-top: 12px; font-size: 11.5px; color: var(--ink-dim); font-family: var(--mono);", ...tid("artifact-detail-extraction-note") }, "Extraction note: " + art.extractionNote) : null,
+    ),
+    // Gap findings section
+    h("div", { class: "tl-subhead", style: "margin-top: 4px;" }, "Document gap analysis"),
+    (art.gapFindings && art.gapFindings.length) ? h("div", { ...tid("artifact-detail-gap-findings") },
+      ...art.gapFindings.map((g, i) => h("div", { class: "cit-row", ...tid(`artifact-detail-gap-${i}`) },
+        h("span", { class: "art-icon", style: `color: var(--${g.verdict === "gap" && g.severity === "blocker" ? "red" : g.verdict === "gap" ? "amber" : g.verdict === "partial" ? "amber" : g.verdict === "pending" ? "ink-dim" : "acc"})` },
+          g.verdict === "gap" ? "✗" : g.verdict === "partial" ? "!" : g.verdict === "pending" ? "○" : "✓"),
+        h("code", null, g.framework),
+        h("code", null, g.article),
+        h("div", { class: "art" },
+          h("b", null, g.section),
+          g.evidenceSpan ? h("div", { style: "color: var(--acc-2); font-size: 11px; margin-top: 3px; font-style: italic;" }, g.evidenceSpan) : null,
+          g.verdict !== "present" ? h("div", { class: "missing-note", style: `color: var(--${g.severity === "blocker" ? "red" : "amber"})` }, g.note) : null,
+        ),
+        h("span", { class: "pill " + (g.verdict === "gap" ? (g.severity === "blocker" ? "fail" : "warning") : g.verdict === "partial" ? "warning" : g.verdict === "pending" ? "muted" : "ok") }, g.verdict + " · " + g.severity),
+      )),
+    ) : h("div", { class: "empty", ...tid("artifact-detail-no-gaps") }, "No gap analysis available for this artifact type."),
+    // Extracted text section
+    h("div", { class: "tl-subhead", style: "margin-top: 22px;" },
+      "Extracted document text ",
+      h("span", { style: "color: var(--ink-mute); font-family: var(--mono); font-size: 10px;" },
+        art.extractedText ? `(${art.extractedText.length.toLocaleString()} chars)` : "(none)"),
+    ),
+    art.extractedText
+      ? h("pre", { class: "json-view", style: "max-height: 380px; white-space: pre-wrap; color: var(--ink);", ...tid("artifact-detail-extracted-text") }, art.extractedText)
+      : h("div", { class: "empty", ...tid("artifact-detail-no-text") }, art.extractionStatus === "pending" ? "This artifact was submitted as a descriptor only. Upload the actual file (or re-submit with contentBase64) to enable text extraction." : "No text extracted."),
+  );
+
+  const foot = h("div", null, h("button", { class: "btn primary", ...tid("artifact-detail-close-btn"), onclick: () => back.remove() }, "Close"));
+  // Replace the spinner: rebuild the modal body
+  const modalBody = back.querySelector(".modal-body");
+  modalBody.innerHTML = "";
+  modalBody.appendChild(body);
+  const modalFoot = back.querySelector(".modal-foot");
+  if (modalFoot) {
+    modalFoot.innerHTML = "";
+    modalFoot.appendChild(foot);
+  } else {
+    const newFoot = h("div", { class: "modal-foot" }, foot);
+    back.querySelector(".modal").appendChild(newFoot);
+  }
 }
 
 // ─── Sample demo payload (one-click demo) ───────────────────────
@@ -354,8 +468,8 @@ function renderShell(body) {
     { href: "#/mcp", label: "MCP / API", k: "M" },
   ];
   const active = location.hash.replace(/^#\/?/, "").split("/")[0];
-  const shell = h("div", { class: "shell" },
-    h("aside", { class: "sidebar" },
+  const shell = h("div", { class: "shell", ...tid("app-shell") },
+    h("aside", { class: "sidebar", ...tid("sidebar") },
       h("div", { class: "brand" },
         h("div", { class: "brand-mark" }, "◉"),
         h("div", null,
@@ -367,20 +481,24 @@ function renderShell(body) {
         h("div", { class: "nav-group" }, "Compliance"),
         ...nav.map(n => {
           const isActive = active && n.href.includes(active);
-          return h("a", { href: n.href, class: "nav-item" + (isActive ? " active" : "") },
+          return h("a", {
+            href: n.href,
+            class: "nav-item" + (isActive ? " active" : ""),
+            ...tid(testidFor("nav", n.label)),
+          },
             h("span", null, n.label),
             h("span", { class: "k" }, n.k),
           );
         }),
       ),
-      S.token ? h("div", { class: "identity" },
-        h("div", { class: "u-role" }, S.role || "unknown"),
-        h("div", { class: "u-name" }, "@" + (S.clientId || "?")),
-        h("a", { class: "u-logout", onclick: () => { clearSession(); location.hash = "#/login"; } }, "Sign out"),
-      ) : h("div", { class: "identity" },
+      S.token ? h("div", { class: "identity", ...tid("sidebar-identity-signed-in") },
+        h("div", { class: "u-role", ...tid("sidebar-user-role") }, S.role || "unknown"),
+        h("div", { class: "u-name", ...tid("sidebar-user-client-id") }, "@" + (S.clientId || "?")),
+        h("a", { class: "u-logout", ...tid("sidebar-signout-link"), onclick: () => { clearSession(); location.hash = "#/login"; } }, "Sign out"),
+      ) : h("div", { class: "identity", ...tid("sidebar-identity-guest") },
         h("div", { class: "u-role" }, "guest"),
         h("div", { class: "u-name" }, "read-only mode"),
-        h("a", { class: "u-logout", style: "color: var(--acc)", onclick: () => { location.hash = "#/login"; } }, "Sign in →"),
+        h("a", { class: "u-logout", style: "color: var(--acc)", ...tid("sidebar-signin-link"), onclick: () => { location.hash = "#/login"; } }, "Sign in →"),
       ),
     ),
     body,
@@ -390,7 +508,7 @@ function renderShell(body) {
 
 // ─── LOGIN ──────────────────────────────────────────────────────
 route("login", async (app) => {
-  const err = h("div", { class: "err" });
+  const err = h("div", { class: "err", ...tid("login-error") });
   async function auth(clientId, secret) {
     err.textContent = "";
     try {
@@ -400,8 +518,8 @@ route("login", async (app) => {
       location.hash = "#/dashboard";
     } catch (e) { err.textContent = e.message; }
   }
-  const custom = { id: h("input", { placeholder: "clientId", value: "governance-admin" }), sec: h("input", { placeholder: "clientSecret", type: "password" }) };
-  app.appendChild(h("div", { class: "login-wrap" },
+  const custom = { id: h("input", { placeholder: "clientId", value: "governance-admin", ...tid("login-client-id-input") }), sec: h("input", { placeholder: "clientSecret", type: "password", ...tid("login-client-secret-input") }) };
+  app.appendChild(h("div", { class: "login-wrap", ...tid("login-page") },
     h("div", { class: "login-card" },
       h("div", { class: "brand-mark" }, "◉"),
       h("h1", null, "Auditor Workbench"),
@@ -409,7 +527,7 @@ route("login", async (app) => {
         "On-premise AI compliance orchestration. Sign in with a service account — a human auditor drives the workbench, or an AI agent drives the identical pipeline via the MCP endpoint. ",
         "All 9 phases produce article-level evidence citations.",
       ),
-      ...ROLES.map(r => h("button", { class: "role-btn", onclick: () => auth(r.clientId, r.secret) },
+      ...ROLES.map(r => h("button", { class: "role-btn", ...tid(testidFor("login-role", r.clientId)), onclick: () => auth(r.clientId, r.secret) },
         h("div", { class: "role-name" }, r.name),
         h("div", { class: "role-desc" }, r.desc),
         h("div", { class: "role-scopes" }, r.scopesLbl),
@@ -417,7 +535,7 @@ route("login", async (app) => {
       h("div", { class: "divider" }, h("span", null, "Or bring your own")),
       h("div", { class: "custom-cred" },
         custom.id, custom.sec,
-        h("button", { class: "btn primary", onclick: () => auth(custom.id.value, custom.sec.value) }, "Sign in"),
+        h("button", { class: "btn primary", ...tid("login-custom-signin-btn"), onclick: () => auth(custom.id.value, custom.sec.value) }, "Sign in"),
         err,
       ),
     ),
@@ -426,19 +544,19 @@ route("login", async (app) => {
 
 // ─── DASHBOARD ──────────────────────────────────────────────────
 route("dashboard", async (app) => {
-  const body = h("div", { class: "main" },
+  const body = h("div", { class: "main", ...tid("dashboard-page") },
     h("div", { class: "page-head" },
       h("div", null,
         h("h1", null, "Dashboard"),
         h("div", { class: "sub" }, "Live infrastructure health, recent audit runs, active certificates. Both human auditors and AI agents (via MCP) produce identical evidence entries."),
       ),
       h("div", { class: "f-r" },
-        h("a", { class: "btn primary", href: "#/audit/new" }, "＋ New Audit"),
+        h("a", { class: "btn primary", href: "#/audit/new", ...tid("dashboard-new-audit-btn") }, "＋ New Audit"),
       ),
     ),
     h("div", { id: "dash-metrics", class: "grid cols-4" }, h("div", { class: "card" }, "Loading…")),
-    h("div", { id: "dash-runs", class: "section" }, h("div", { class: "section-head" }, h("h2", null, "Recent Audit Runs")), h("div", { class: "section-body" }, h("div", { class: "empty" }, "Loading…"))),
-    h("div", { id: "dash-certs", class: "section" }, h("div", { class: "section-head" }, h("h2", null, "Recent Certificates")), h("div", { class: "section-body" }, h("div", { class: "empty" }, "Loading…"))),
+    h("div", { id: "dash-runs", class: "section", ...tid("dashboard-runs-section") }, h("div", { class: "section-head" }, h("h2", null, "Recent Audit Runs")), h("div", { class: "section-body" }, h("div", { class: "empty" }, "Loading…"))),
+    h("div", { id: "dash-certs", class: "section", ...tid("dashboard-certs-section") }, h("div", { class: "section-head" }, h("h2", null, "Recent Certificates")), h("div", { class: "section-body" }, h("div", { class: "empty" }, "Loading…"))),
   );
   app.appendChild(renderShell(body));
 
@@ -449,11 +567,11 @@ route("dashboard", async (app) => {
   ]);
 
   const svc = health?.services || { postgres: "?", neo4j: "?", redis: "?", certSigner: "?" };
-  document.getElementById("dash-metrics").replaceWith(h("div", { class: "grid cols-4" },
-    h("div", { class: "card" }, h("h3", null, "Overall"), h("div", { class: "metric" }, health?.status === "ok" ? h("span", { class: "pill ok" }, "Operational") : h("span", { class: "pill warn" }, health?.status || "?")), h("div", { class: "metric-sub" }, "System-wide readiness")),
-    h("div", { class: "card" }, h("h3", null, "PostgreSQL"), h("div", { class: "metric" }, h("span", { class: "pill " + svc.postgres }, svc.postgres)), h("div", { class: "metric-sub" }, "Evidence store")),
-    h("div", { class: "card" }, h("h3", null, "Neo4j Graph"), h("div", { class: "metric" }, h("span", { class: "pill " + svc.neo4j }, svc.neo4j)), h("div", { class: "metric-sub" }, "Lineage graph")),
-    h("div", { class: "card" }, h("h3", null, "Redis Fabric"), h("div", { class: "metric" }, h("span", { class: "pill " + svc.redis }, svc.redis)), h("div", { class: "metric-sub" }, "Event streams")),
+  document.getElementById("dash-metrics").replaceWith(h("div", { class: "grid cols-4", ...tid("dashboard-metrics") },
+    h("div", { class: "card", ...tid("dashboard-metric-overall") }, h("h3", null, "Overall"), h("div", { class: "metric" }, health?.status === "ok" ? h("span", { class: "pill ok" }, "Operational") : h("span", { class: "pill warn" }, health?.status || "?")), h("div", { class: "metric-sub" }, "System-wide readiness")),
+    h("div", { class: "card", ...tid("dashboard-metric-postgres") }, h("h3", null, "PostgreSQL"), h("div", { class: "metric" }, h("span", { class: "pill " + svc.postgres }, svc.postgres)), h("div", { class: "metric-sub" }, "Evidence store")),
+    h("div", { class: "card", ...tid("dashboard-metric-neo4j") }, h("h3", null, "Neo4j Graph"), h("div", { class: "metric" }, h("span", { class: "pill " + svc.neo4j }, svc.neo4j)), h("div", { class: "metric-sub" }, "Lineage graph")),
+    h("div", { class: "card", ...tid("dashboard-metric-redis") }, h("h3", null, "Redis Fabric"), h("div", { class: "metric" }, h("span", { class: "pill " + svc.redis }, svc.redis)), h("div", { class: "metric-sub" }, "Event streams")),
   ));
 
   const runsEl = document.getElementById("dash-runs").querySelector(".section-body");
@@ -466,9 +584,14 @@ route("dashboard", async (app) => {
 });
 
 function renderRunsTable(rows) {
-  return h("table", null,
+  return h("table", { ...tid("runs-table") },
     h("thead", null, h("tr", null, ...["Run", "Model", "Version", "Status", "Started", ""].map(t => h("th", null, t)))),
-    h("tbody", null, ...rows.map(r => h("tr", { class: "clickable", onclick: () => location.hash = `#/runs/${r.runId}` },
+    h("tbody", null, ...rows.map((r, idx) => h("tr", {
+      class: "clickable",
+      ...tid(`run-row-${idx}`),
+      "data-run-id": r.runId,
+      onclick: () => location.hash = `#/runs/${r.runId}`,
+    },
       h("td", null, h("code", null, short(r.runId, 12))),
       h("td", null, r.modelId),
       h("td", null, r.modelVersion),
@@ -480,9 +603,14 @@ function renderRunsTable(rows) {
 }
 
 function renderCertsTable(rows) {
-  return h("table", null,
+  return h("table", { ...tid("certs-table") },
     h("thead", null, h("tr", null, ...["Certificate", "Model", "Status", "Issued", "Expires", ""].map(t => h("th", null, t)))),
-    h("tbody", null, ...rows.map(c => h("tr", { class: "clickable", onclick: () => location.hash = `#/certificates/${encodeURIComponent(c.certificateId)}` },
+    h("tbody", null, ...rows.map((c, idx) => h("tr", {
+      class: "clickable",
+      ...tid(`cert-row-${idx}`),
+      "data-cert-id": c.certificateId,
+      onclick: () => location.hash = `#/certificates/${encodeURIComponent(c.certificateId)}`,
+    },
       h("td", null, h("code", null, short(c.certificateId, 22))),
       h("td", null, c.modelId),
       h("td", null, h("span", { class: "pill " + c.status }, c.status)),
@@ -535,8 +663,8 @@ route("certificates", async (app) => {
 
 // ─── VERIFY CERT (public) ──────────────────────────────────────
 route("verify", async (app) => {
-  const inp = h("input", { placeholder: "urn:uuid:… certificate id", style: "width: 100%; padding: 10px 12px; background: var(--bg-elev); border: 1px solid var(--line); border-radius: 6px; color: var(--ink); font-family: var(--mono);" });
-  const out = h("div", null);
+  const inp = h("input", { placeholder: "urn:uuid:… certificate id", style: "width: 100%; padding: 10px 12px; background: var(--bg-elev); border: 1px solid var(--line); border-radius: 6px; color: var(--ink); font-family: var(--mono);", ...tid("verify-cert-input") });
+  const out = h("div", { ...tid("verify-cert-output") });
   async function run() {
     out.innerHTML = "";
     if (!inp.value.trim()) return;
@@ -547,10 +675,10 @@ route("verify", async (app) => {
       ]);
       out.appendChild(renderVerifyResult(v, c));
     } catch (e) {
-      out.appendChild(h("div", { class: "err" }, "Verification failed: " + e.message));
+      out.appendChild(h("div", { class: "err", ...tid("verify-cert-error") }, "Verification failed: " + e.message));
     }
   }
-  const body = h("div", { class: "main" },
+  const body = h("div", { class: "main", ...tid("verify-page") },
     h("div", { class: "page-head" },
       h("div", null, h("h1", null, "Verify Certificate"), h("div", { class: "sub" }, "Public, offline Ed25519 (eddsa-jcs-2022) signature verification against the on-premise DID. No network egress.")),
     ),
@@ -558,7 +686,7 @@ route("verify", async (app) => {
       h("div", { class: "section-head" }, h("h2", null, "Certificate ID")),
       h("div", { style: "padding: 20px;" },
         h("div", { class: "field" }, inp, h("div", { class: "hint" }, "Paste the certificateId from any issued credential (urn:uuid:…).")),
-        h("button", { class: "btn primary", onclick: run }, "Verify"),
+        h("button", { class: "btn primary", ...tid("verify-cert-submit-btn"), onclick: run }, "Verify"),
       ),
     ),
     out,
@@ -569,14 +697,14 @@ route("verify", async (app) => {
 function renderVerifyResult(v, c) {
   const checks = v.checks || {};
   const rows = [
-    ["Signature (Ed25519 · eddsa-jcs-2022)", checks.signatureValid],
-    ["Schema (W3C VC 2.0 + governance context)", checks.schemaValid],
-    ["Not expired", checks.notExpired],
-    ["Not revoked", checks.notRevoked],
+    ["signatureValid", "Signature (Ed25519 · eddsa-jcs-2022)", checks.signatureValid],
+    ["schemaValid", "Schema (W3C VC 2.0 + governance context)", checks.schemaValid],
+    ["notExpired", "Not expired", checks.notExpired],
+    ["notRevoked", "Not revoked", checks.notRevoked],
   ];
-  return h("div", null,
+  return h("div", { ...tid("verify-result") },
     h("div", { class: "cert-header" },
-      h("div", { class: "cert-title" }, v.verified ? "✓ Certificate is valid" : "✗ Certificate FAILED verification"),
+      h("div", { class: "cert-title", ...tid("verify-result-overall") }, v.verified ? "✓ Certificate is valid" : "✗ Certificate FAILED verification"),
       h("div", { class: "cert-id" }, v.certificateId),
       h("div", { class: "cert-meta" },
         h("div", null, h("div", { class: "cm-k" }, "Overall"), h("div", { class: "cm-v acc" }, v.verified ? "verified" : "invalid")),
@@ -588,7 +716,7 @@ function renderVerifyResult(v, c) {
     h("div", { class: "section" },
       h("div", { class: "section-head" }, h("h2", null, "Verification Checks")),
       h("div", { style: "padding: 14px 20px;" },
-        ...rows.map(([label, ok]) => h("div", { class: "verify-row" },
+        ...rows.map(([key, label, ok]) => h("div", { class: "verify-row", ...tid(`verify-check-${key}`) },
           h("span", { style: `color: var(--${ok ? "acc" : "red"})` }, ok ? "✓" : "✗"),
           h("span", null, label),
           h("span", { class: "pill " + (ok ? "ok" : "fail") }, ok ? "PASS" : "FAIL"),
@@ -597,31 +725,31 @@ function renderVerifyResult(v, c) {
     ),
     c ? h("div", { class: "section" },
       h("div", { class: "section-head" }, h("h2", null, "W3C Verifiable Credential")),
-      h("div", { style: "padding: 14px 20px;" }, h("pre", { class: "json-view" }, JSON.stringify(c.vc_payload || c, null, 2))),
+      h("div", { style: "padding: 14px 20px;" }, h("pre", { class: "json-view", ...tid("verify-vc-json") }, JSON.stringify(c.vc_payload || c, null, 2))),
     ) : null,
   );
 }
 
 // ─── EVENTS ─────────────────────────────────────────────────────
 route("events", async (app) => {
-  const body = h("div", { class: "main" },
+  const body = h("div", { class: "main", ...tid("events-page") },
     h("div", { class: "page-head" },
       h("div", null, h("h1", null, "Event Ledger"), h("div", { class: "sub" }, "Redis streams — phase events (webhook fabric) and the dead-letter queue after 3 delivery attempts.")),
-      h("button", { class: "btn", onclick: async () => { try { await api("/api/v1/events/test-dead-letter", { method: "POST" }); toast("Poison event published — will land in DLQ", "info"); setTimeout(router, 1500); } catch (e) { toast(e.message, "error"); } } }, "Inject test DLQ event"),
+      h("button", { class: "btn", ...tid("events-inject-dlq-btn"), onclick: async () => { try { await api("/api/v1/events/test-dead-letter", { method: "POST" }); toast("Poison event published — will land in DLQ", "info"); setTimeout(router, 1500); } catch (e) { toast(e.message, "error"); } } }, "Inject test DLQ event"),
     ),
-    h("div", { id: "ev-recent", class: "section" }, h("div", { class: "section-head" }, h("h2", null, "Recent Events (delivered)")), h("div", { class: "section-body" }, h("div", { class: "empty" }, "Loading…"))),
-    h("div", { id: "ev-dlq", class: "section" }, h("div", { class: "section-head" }, h("h2", null, "Dead-Letter Queue")), h("div", { class: "section-body" }, h("div", { class: "empty" }, "Loading…"))),
+    h("div", { id: "ev-recent", class: "section", ...tid("events-recent-section") }, h("div", { class: "section-head" }, h("h2", null, "Recent Events (delivered)")), h("div", { class: "section-body" }, h("div", { class: "empty" }, "Loading…"))),
+    h("div", { id: "ev-dlq", class: "section", ...tid("events-dlq-section") }, h("div", { class: "section-head" }, h("h2", null, "Dead-Letter Queue")), h("div", { class: "section-body" }, h("div", { class: "empty" }, "Loading…"))),
   );
   app.appendChild(renderShell(body));
   const [rec, dlq] = await Promise.all([
     api("/api/v1/events/recent"),
     api("/api/v1/events/dead-letter"),
   ]);
-  function evTable(rows) {
+  function evTable(rows, kind) {
     if (!rows.length) return h("div", { class: "empty" }, "No events.");
-    return h("table", null,
+    return h("table", { ...tid(`events-${kind}-table`) },
       h("thead", null, h("tr", null, ...["Event", "Phase", "Run", "Status", "Attempts", "At"].map(t => h("th", null, t)))),
-      h("tbody", null, ...rows.map(e => h("tr", null,
+      h("tbody", null, ...rows.map((e, idx) => h("tr", { ...tid(`events-${kind}-row-${idx}`) },
         h("td", null, h("code", null, e.event_type || e.type || "?")),
         h("td", null, e.phase_key || "—"),
         h("td", null, e.run_id ? h("a", { href: `#/runs/${e.run_id}` }, h("code", null, short(e.run_id, 8))) : "—"),
@@ -631,8 +759,8 @@ route("events", async (app) => {
       ))),
     );
   }
-  const r1 = document.getElementById("ev-recent").querySelector(".section-body"); r1.innerHTML = ""; r1.appendChild(evTable(rec.events || []));
-  const r2 = document.getElementById("ev-dlq").querySelector(".section-body"); r2.innerHTML = ""; r2.appendChild(evTable(dlq.ledger || []));
+  const r1 = document.getElementById("ev-recent").querySelector(".section-body"); r1.innerHTML = ""; r1.appendChild(evTable(rec.events || [], "recent"));
+  const r2 = document.getElementById("ev-dlq").querySelector(".section-body"); r2.innerHTML = ""; r2.appendChild(evTable(dlq.ledger || [], "dlq"));
 });
 
 // ─── MCP / API reference ────────────────────────────────────────
@@ -670,10 +798,10 @@ route("mcp", async (app) => {
 
 // ─── REAUDIT ────────────────────────────────────────────────────
 route("reaudit", async (app) => {
-  const modelIn = h("input", { placeholder: "modelId to reaudit" });
-  const typeSel = h("select", null, ...["model_version_change", "dataset_revision", "policy_update", "critical_incident", "drift_threshold_breach"].map(t => h("option", { value: t }, t)));
-  const detail = h("input", { placeholder: "Trigger detail (free-text summary)" });
-  const out = h("div", { style: "margin-top: 16px;" });
+  const modelIn = h("input", { placeholder: "modelId to reaudit", ...tid("reaudit-model-id-input") });
+  const typeSel = h("select", { ...tid("reaudit-trigger-type-select") }, ...["model_version_change", "dataset_revision", "policy_update", "critical_incident", "drift_threshold_breach"].map(t => h("option", { value: t }, t)));
+  const detail = h("input", { placeholder: "Trigger detail (free-text summary)", ...tid("reaudit-detail-input") });
+  const out = h("div", { style: "margin-top: 16px;", ...tid("reaudit-output") });
   async function run() {
     if (!modelIn.value.trim()) { toast("Enter a modelId first", "error"); return; }
     if (!hasScope("reaudit:trigger")) { toast("Your role lacks reaudit:trigger", "error"); return; }
@@ -683,16 +811,16 @@ route("reaudit", async (app) => {
         modelId: modelIn.value.trim(),
         trigger: { type: typeSel.value, detail: detail.value || `${typeSel.value} via workbench` },
       } });
-      out.appendChild(h("div", { class: "phase-result passed" },
+      out.appendChild(h("div", { class: "phase-result passed", ...tid("reaudit-result") },
         h("div", { class: "r-head" }, h("span", { class: "r-title" }, "Reaudit executed"),
           h("span", { class: "r-hash" }, res.reauditRunId)),
         h("pre", { class: "json-view" }, JSON.stringify(res, null, 2)),
-        h("a", { class: "btn sm primary", href: `#/runs/${res.reauditRunId}`, style: "margin-top: 12px;" }, "Open reaudit run →"),
+        h("a", { class: "btn sm primary", href: `#/runs/${res.reauditRunId}`, style: "margin-top: 12px;", ...tid("reaudit-open-run-btn") }, "Open reaudit run →"),
       ));
       toast("Reaudit completed", "success");
     } catch (e) { toast(e.message, "error"); out.appendChild(h("pre", { class: "json-view" }, JSON.stringify(e.data || e.message, null, 2))); }
   }
-  const body = h("div", { class: "main" },
+  const body = h("div", { class: "main", ...tid("reaudit-page") },
     h("div", { class: "page-head" },
       h("div", null, h("h1", null, "Reaudit"), h("div", { class: "sub" }, "Impact-scoped re-run: only phases affected by the trigger are re-executed; unaffected evidence is carried forward with a signed link to the original run.")),
     ),
@@ -704,7 +832,7 @@ route("reaudit", async (app) => {
           h("div", { class: "field" }, h("label", null, "Trigger type"), typeSel),
         ),
         h("div", { class: "field" }, h("label", null, "Detail"), detail),
-        h("button", { class: "btn primary", onclick: run }, "Trigger reaudit"),
+        h("button", { class: "btn primary", ...tid("reaudit-submit-btn"), onclick: run }, "Trigger reaudit"),
         out,
       ),
     ),
@@ -749,17 +877,18 @@ async function renderWizard(app, existingRunId) {
   }
 
   function stepList() {
-    return h("div", { class: "step-list" },
+    return h("div", { class: "step-list", ...tid("wizard-step-list") },
       ...PHASES.map((p, i) => h("div", {
         class: "step" + (i === state.current ? " active" : "") + (state.results[p.key]?.status === "passed" ? " done" : "") + (state.results[p.key]?.status === "blocked" ? " blocked" : ""),
         "data-idx": i,
+        ...tid(testidFor("wizard-step", p.key)),
         onclick: () => { if (state.results[p.key] || i === state.current) { state.current = i; rerender(); } },
       },
         h("div", { class: "step-num" }, state.results[p.key]?.status === "passed" ? "✓" : state.results[p.key]?.status === "blocked" ? "!" : String(i + 1)),
         h("div", { class: "step-title" }, p.label),
       )),
       h("div", { style: "margin-top: 14px; padding: 10px; border-top: 1px solid var(--line-soft);" },
-        h("button", { class: "btn primary sm", style: "width: 100%;", onclick: () => runDemo(state, rerender) }, "▶ Run full demo audit"),
+        h("button", { class: "btn primary sm", style: "width: 100%;", ...tid("wizard-run-demo-btn"), onclick: () => runDemo(state, rerender) }, "▶ Run full demo audit"),
         h("div", { class: "hint", style: "margin-top: 8px; text-align: center;" }, "Auto-executes phases 1–9 with the pre-filled sample."),
       ),
     );
@@ -768,13 +897,13 @@ async function renderWizard(app, existingRunId) {
   function rerender() {
     const p = PHASES[state.current];
     app.innerHTML = "";
-    const body = h("div", { class: "main" },
+    const body = h("div", { class: "main", ...tid("audit-wizard-page") },
       h("div", { class: "page-head" },
         h("div", null,
           h("h1", null, state.runId ? "Audit Run — Continue" : "New Audit"),
           h("div", { class: "sub" }, state.runId ? `Run ${short(state.runId, 24)} — pick up where you left off, or run the remaining phases in one click.` : "Sandbox flow. Submit evidence artifacts inline; each phase records which artifacts were inspected against which regulatory article."),
         ),
-        state.runId ? h("a", { class: "btn", href: `#/runs/${state.runId}` }, "Full run detail →") : null,
+        state.runId ? h("a", { class: "btn", ...tid("wizard-open-run-detail"), href: `#/runs/${state.runId}` }, "Full run detail →") : null,
       ),
       h("div", { class: "wizard" }, stepList(), phaseBody(p, state, rerender)),
     );
@@ -836,7 +965,7 @@ function phaseBody(p, state, rerender) {
   // action bar
   const canRun = p.key === "intake" || (state.runId && !state.blocked);
   const done = !!result;
-  const runBtn = h("button", { class: "btn primary", disabled: !canRun, onclick: async () => {
+  const runBtn = h("button", { class: "btn primary", ...tid(`wizard-run-phase-${p.key}-btn`), disabled: !canRun, onclick: async () => {
     try {
       let body, path;
       if (p.key === "intake") { body = state.intake; path = "/api/v1/phases/intake"; }
@@ -853,10 +982,10 @@ function phaseBody(p, state, rerender) {
   } }, done ? "Re-run phase" : "Run phase");
 
   wrap.appendChild(h("div", { class: "wizard-nav" },
-    h("button", { class: "btn ghost", disabled: state.current === 0, onclick: () => { state.current -= 1; rerender(); } }, "← Back"),
+    h("button", { class: "btn ghost", ...tid("wizard-back-btn"), disabled: state.current === 0, onclick: () => { state.current -= 1; rerender(); } }, "← Back"),
     h("div", { class: "f-r" },
       runBtn,
-      h("button", { class: "btn", disabled: !done || state.current === PHASES.length - 1, onclick: () => { state.current += 1; rerender(); } }, "Next →"),
+      h("button", { class: "btn", ...tid("wizard-next-btn"), disabled: !done || state.current === PHASES.length - 1, onclick: () => { state.current += 1; rerender(); } }, "Next →"),
     ),
   ));
 
@@ -991,7 +1120,7 @@ function checkboxGridInner(target, fields) {
 }
 
 function renderArtifactEditor(intake) {
-  const list = h("div", { class: "artifact-list" });
+  const list = h("div", { class: "artifact-list", ...tid("intake-artifact-list") });
   function refresh() {
     list.innerHTML = "";
     if (!intake.evidenceArtifacts.length) {
@@ -1000,20 +1129,20 @@ function renderArtifactEditor(intake) {
     }
     intake.evidenceArtifacts.forEach((a, idx) => {
       const hasBytes = !!a.contentBase64;
-      list.appendChild(h("div", { class: "artifact-item" },
+      list.appendChild(h("div", { class: "artifact-item", ...tid(`intake-artifact-item-${idx}`), "data-artifact-type": a.type },
         h("span", { class: "icon" }, hasBytes ? "📄" : "◈"),
         h("div", { class: "name" },
           h("b", null, a.name,
             hasBytes ? h("span", { class: "pill ok", style: "margin-left:6px;font-size:9.5px;" }, "bytes uploaded") : null),
           h("span", { class: "meta" }, a.type + " · " + (a.uri || (hasBytes ? `${(a.contentBase64.length * 0.75 / 1024).toFixed(1)} KB` : "descriptor-only"))),
         ),
-        h("button", { class: "btn sm danger", onclick: () => { intake.evidenceArtifacts.splice(idx, 1); refresh(); } }, "Remove"),
+        h("button", { class: "btn sm danger", ...tid(`intake-artifact-remove-${idx}`), onclick: () => { intake.evidenceArtifacts.splice(idx, 1); refresh(); } }, "Remove"),
       ));
     });
   }
   refresh();
-  const nameIn = h("input", { placeholder: "Artifact name (e.g. DPIA v1.0)" });
-  const typeSel = h("select", null, ...[
+  const nameIn = h("input", { placeholder: "Artifact name (e.g. DPIA v1.0)", ...tid("intake-artifact-name-input") });
+  const typeSel = h("select", { ...tid("intake-artifact-type-select") }, ...[
     "model_card", "dpia", "dataset_lineage", "training_log",
     "bias_test_output", "fairness_metrics_report",
     "robustness_test_log", "security_audit", "adversarial_test_report",
@@ -1023,10 +1152,10 @@ function renderArtifactEditor(intake) {
     "risk_assessment", "conformity_declaration",
     "monitoring_dashboard", "incident_report", "other",
   ].map(t => h("option", { value: t }, t)));
-  const uriIn = h("input", { placeholder: "URI or reference (internal://…) — optional" });
-  const fileIn = h("input", { type: "file", accept: ".pdf,.csv,.json,.md,.txt,.log" });
+  const uriIn = h("input", { placeholder: "URI or reference (internal://…) — optional", ...tid("intake-artifact-uri-input") });
+  const fileIn = h("input", { type: "file", accept: ".pdf,.csv,.json,.md,.txt,.log", ...tid("intake-artifact-file-input") });
 
-  const addBtn = h("button", { class: "btn primary sm", onclick: async () => {
+  const addBtn = h("button", { class: "btn primary sm", ...tid("intake-artifact-add-btn"), onclick: async () => {
     if (!nameIn.value.trim()) { toast("Name required", "error"); return; }
     const artifact = { name: nameIn.value.trim(), type: typeSel.value };
     if (uriIn.value.trim()) artifact.uri = uriIn.value.trim();
@@ -1149,40 +1278,46 @@ route("runs/:runId", async (app, params) => {
 function renderRunDetail(run) {
   const totalGaps = (run.gaps || []).filter(g => g.verdict === "gap" && g.severity === "blocker").length;
   const warnGaps = (run.gaps || []).filter(g => g.verdict === "gap" && g.severity === "warning").length;
-  const container = h("div", { class: "main" },
+  const container = h("div", { class: "main", ...tid("run-detail-page"), "data-run-id": run.runId },
     h("div", { class: "page-head" },
       h("div", null,
         h("h1", null, `Run · ${run.modelId} v${run.modelVersion}`),
         h("div", { class: "sub" }, `runId ${run.runId} — ${fmtDate(run.createdAt)}`),
       ),
       h("div", { class: "f-r" },
-        h("span", { class: "pill " + run.status }, run.status.replace("_", " ")),
-        run.certificateId ? h("a", { class: "btn primary", href: `#/certificates/${encodeURIComponent(run.certificateId)}` }, "View Certificate →") : null,
+        h("span", { class: "pill " + run.status, ...tid("run-detail-status-pill") }, run.status.replace("_", " ")),
+        run.certificateId ? h("a", { class: "btn primary", ...tid("run-detail-view-cert-btn"), href: `#/certificates/${encodeURIComponent(run.certificateId)}` }, "View Certificate →") : null,
       ),
     ),
-    h("div", { class: "grid cols-4" },
-      h("div", { class: "card" }, h("h3", null, "Phases"), h("div", { class: "metric" }, `${run.phases.length}/9`), h("div", { class: "metric-sub" }, run.phases.filter(p => p.status === "passed").length + " passed, " + run.phases.filter(p => p.status === "blocked").length + " blocked")),
-      h("div", { class: "card" }, h("h3", null, "Artifacts"), h("div", { class: "metric" }, run.artifacts?.length ?? 0), h("div", { class: "metric-sub" }, "Evidence documents submitted")),
-      h("div", { class: "card" }, h("h3", null, "Citations"), h("div", { class: "metric" }, run.citations?.length ?? 0), h("div", { class: "metric-sub" }, "Artifact ↔ article mappings")),
-      h("div", { class: "card" }, h("h3", null, "Document gaps"), h("div", { class: "metric", style: `color: var(--${totalGaps > 0 ? "red" : warnGaps > 0 ? "amber" : "acc"})` }, totalGaps + " / " + warnGaps), h("div", { class: "metric-sub" }, "Blocker · warning sections missing")),
+    h("div", { class: "grid cols-4", ...tid("run-detail-kpis") },
+      h("div", { class: "card", ...tid("run-detail-kpi-phases") }, h("h3", null, "Phases"), h("div", { class: "metric" }, `${run.phases.length}/9`), h("div", { class: "metric-sub" }, run.phases.filter(p => p.status === "passed").length + " passed, " + run.phases.filter(p => p.status === "blocked").length + " blocked")),
+      h("div", { class: "card", ...tid("run-detail-kpi-artifacts") }, h("h3", null, "Artifacts"), h("div", { class: "metric" }, run.artifacts?.length ?? 0), h("div", { class: "metric-sub" }, "Evidence documents submitted")),
+      h("div", { class: "card", ...tid("run-detail-kpi-citations") }, h("h3", null, "Citations"), h("div", { class: "metric" }, run.citations?.length ?? 0), h("div", { class: "metric-sub" }, "Artifact ↔ article mappings")),
+      h("div", { class: "card", ...tid("run-detail-kpi-gaps") }, h("h3", null, "Document gaps"), h("div", { class: "metric", style: `color: var(--${totalGaps > 0 ? "red" : warnGaps > 0 ? "amber" : "acc"})` }, totalGaps + " / " + warnGaps), h("div", { class: "metric-sub" }, "Blocker · warning sections missing")),
     ),
     h("div", { class: "section" },
       h("div", { class: "section-head" }, h("h2", null, "9-Phase Timeline"), h("span", { class: "pill muted" }, "click a phase to expand")),
-      h("div", { class: "section-body", style: "padding: 14px 16px;" },
+      h("div", { class: "section-body", style: "padding: 14px 16px;", ...tid("run-detail-timeline") },
         ...run.phases.map(ph => renderTimelinePhase(ph, run)),
       ),
     ),
     h("div", { class: "section" },
-      h("div", { class: "section-head" }, h("h2", null, "Evidence Artifacts")),
-      h("div", { class: "section-body" }, artifactTable(run.artifacts || [], run.citations || [])),
+      h("div", { class: "section-head" }, h("h2", null, "Evidence Artifacts"), h("span", { class: "pill muted" }, "click a row to view extracted text + gaps")),
+      h("div", { class: "section-body" }, artifactTable(run.artifacts || [], run.citations || [], run)),
     ),
   );
   return container;
 }
 
 function renderTimelinePhase(ph, run) {
-  const body = h("div", { class: "tl-body" });
-  const head = h("div", { class: "tl-head " + ph.status, onclick: () => { body.classList.toggle("open"); } },
+  const body = h("div", { class: "tl-body", ...tid(`timeline-body-${ph.phase}`) });
+  const head = h("div", {
+    class: "tl-head " + ph.status,
+    ...tid(`timeline-head-${ph.phase}`),
+    "data-phase": ph.phase,
+    "data-status": ph.status,
+    onclick: () => { body.classList.toggle("open"); },
+  },
     h("div", { class: "tl-num" }, ph.status === "passed" ? "✓" : ph.status === "blocked" ? "!" : String(ph.phaseNumber)),
     h("div", { class: "tl-title" }, `${ph.phaseNumber}. ${humanizePhase(ph.phase)}`,
       h("div", { class: "tl-desc" }, ph.legalMappings.map(m => `${m.framework}:${m.article}`).join(" · ")),
@@ -1213,7 +1348,12 @@ function renderTimelinePhase(ph, run) {
   if (gaps.length) {
     body.appendChild(h("div", { class: "tl-subhead" },
       `Document gap analysis — ${gapsBlocker.length} blocker · ${gapsWarning.length} warning · ${gapsPresent.length} present/partial`));
-    gaps.forEach(g => body.appendChild(h("div", { class: "cit-row" },
+    gaps.forEach((g, idx) => body.appendChild(h("div", {
+      class: "cit-row clickable",
+      title: "Click to open the source artifact",
+      ...tid(`${ph.phase}-gap-${idx}`),
+      onclick: () => g.artifactId && openArtifactDetail(g.artifactId, run),
+    },
       h("span", { class: "art-icon", style: `color: var(--${g.verdict === "gap" && g.severity === "blocker" ? "red" : g.verdict === "gap" ? "amber" : g.verdict === "partial" ? "amber" : "acc"})` },
         g.verdict === "gap" ? "✗" : g.verdict === "partial" ? "!" : "✓"),
       h("code", null, g.framework),
@@ -1230,7 +1370,12 @@ function renderTimelinePhase(ph, run) {
 
   if (cited.length) {
     body.appendChild(h("div", { class: "tl-subhead" }, "Articles evidenced — artifacts inspected"));
-    cited.forEach(c => body.appendChild(h("div", { class: "cit-row" },
+    cited.forEach((c, idx) => body.appendChild(h("div", {
+      class: "cit-row clickable",
+      title: "Click to open the source artifact",
+      ...tid(`${ph.phase}-citation-${idx}`),
+      onclick: () => c.artifactId && openArtifactDetail(c.artifactId, run),
+    },
       h("span", { class: "art-icon", style: `color: var(--${c.verdict === "fail" ? "red" : c.verdict === "warning" ? "amber" : "acc"})` }, c.verdict === "fail" ? "✗" : c.verdict === "warning" ? "!" : "✓"),
       h("code", null, c.framework),
       h("code", null, c.article),
@@ -1269,17 +1414,23 @@ function humanizePhase(k) {
   })[k] || k;
 }
 
-function artifactTable(arts, cits) {
-  if (!arts.length) return h("div", { class: "empty" }, "No artifacts submitted for this run.");
-  return h("table", null,
+function artifactTable(arts, cits, run) {
+  if (!arts.length) return h("div", { class: "empty", ...tid("artifact-table-empty") }, "No artifacts submitted for this run.");
+  return h("table", { ...tid("artifact-table") },
     h("thead", null, h("tr", null, ...["Name", "Type", "Extraction", "Gap score", "sha256", "Cited in phases", "Submitted"].map(t => h("th", null, t)))),
-    h("tbody", null, ...arts.map(a => {
+    h("tbody", null, ...arts.map((a, idx) => {
       const phases = [...new Set(cits.filter(c => c.artifactId === a.artifactId).map(c => c.phaseKey))];
       const g = a.gapScore;
       const gPill = g == null ? h("span", { class: "pill muted" }, "—") :
                     h("span", { class: "pill " + (g >= 0.8 ? "ok" : g >= 0.5 ? "warning" : "fail") },
                       (g * 100).toFixed(0) + "%");
-      return h("tr", null,
+      return h("tr", {
+        class: "clickable",
+        title: "Click to view extracted text + gap findings",
+        ...tid(`artifact-row-${idx}`),
+        "data-artifact-id": a.artifactId,
+        onclick: () => openArtifactDetail(a.artifactId, run),
+      },
         h("td", null, h("b", null, a.name), a.uri ? h("div", { style: "font-size: 10.5px; color: var(--ink-mute); font-family: var(--mono); margin-top: 2px;" }, short(a.uri, 60)) : null),
         h("td", null, h("code", null, a.type)),
         h("td", null,
@@ -1305,15 +1456,15 @@ route("certificates/:certId", async (app, params) => {
   ]);
   app.innerHTML = "";
   const vc = cert.vc_payload;
-  const detail = h("div", { class: "main" },
+  const detail = h("div", { class: "main", ...tid("cert-detail-page"), "data-cert-id": params.certId },
     h("div", { class: "page-head" },
       h("div", null,
         h("h1", null, "Certificate"),
         h("div", { class: "sub" }, "W3C Verifiable Credential 2.0 · eddsa-jcs-2022 · Ed25519 · did:key"),
       ),
       h("div", { class: "f-r" },
-        h("span", { class: "pill " + cert.status }, cert.status),
-        hasScope("certs:read") && cert.status === "active" ? h("button", { class: "btn danger", onclick: () => revokeCert(params.certId) }, "Revoke…") : null,
+        h("span", { class: "pill " + cert.status, ...tid("cert-detail-status-pill") }, cert.status),
+        hasScope("certs:read") && cert.status === "active" ? h("button", { class: "btn danger", ...tid("cert-detail-revoke-btn"), onclick: () => revokeCert(params.certId) }, "Revoke…") : null,
       ),
     ),
     h("div", { class: "cert-header" },

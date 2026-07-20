@@ -197,6 +197,8 @@ td .mono, td code { color: var(--acc-2); }
 .tl-subhead:first-child { margin-top: 12px; }
 
 .cit-row { display: grid; grid-template-columns: 22px 100px 80px 1fr 100px; gap: 12px; padding: 8px 10px; border: 1px solid var(--line-soft); border-radius: 6px; margin-bottom: 6px; font-size: 12px; background: var(--bg); align-items: center; }
+.cit-row.clickable { cursor: pointer; transition: border-color .12s, background .12s; }
+.cit-row.clickable:hover { border-color: var(--acc); background: var(--panel-2); }
 .cit-row .art { color: var(--ink); }
 .cit-row .art b { display: block; margin-bottom: 1px; }
 .cit-row .art .meta { font-family: var(--mono); font-size: 10.5px; color: var(--ink-mute); }
