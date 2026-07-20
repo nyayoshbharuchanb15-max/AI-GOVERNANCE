@@ -44,6 +44,11 @@ import type {
   AgentAutonomyResult,
 } from "./types.js";
 import { TOOL_SCHEMAS } from "./tool-schemas.js";
+import {
+  GOVERNANCE_TOOL_SCHEMAS,
+  isGovernanceTool,
+  handleGovernanceTool,
+} from "./governance-tools.js";
 import { ERROR_CODE_REQUEST_CANCELLED } from "./errors.js";
 
 // ─── Constants ────────────────────────────────────────────────────
@@ -146,7 +151,7 @@ const server = new Server(
 //  TOOL DEFINITIONS — Rigorous JSON Schema with full validation
 // ═══════════════════════════════════════════════════════════════════
 
-const TOOLS = TOOL_SCHEMAS.map((t) => ({
+const TOOLS = [...TOOL_SCHEMAS, ...GOVERNANCE_TOOL_SCHEMAS].map((t) => ({
   name: t.name,
   description: t.description,
   inputSchema: t.inputSchema,
@@ -513,6 +518,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
   if (isCancelled(requestId)) {
     cancelledRequests.delete(requestId);
     return mcpError(ERROR_CODE_REQUEST_CANCELLED as unknown as ErrorCode, "Request was cancelled by the client");
+  }
+
+  // Governance pipeline tools (9-phase flow) — validated + authorized at the
+  // MCP layer inside handleGovernanceTool before FastAPI is invoked.
+  if (isGovernanceTool(name)) {
+    return await handleGovernanceTool(name, (args ?? {}) as Record<string, unknown>);
   }
 
    if (!args) {

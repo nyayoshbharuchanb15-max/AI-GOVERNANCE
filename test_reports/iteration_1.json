@@ -1,0 +1,21 @@
+{
+  "summary": "Backend-only regression testing of AI Governance MCP Server. Executed existing E2E pytest suite (tests/governance/test_governance_pipeline.py) => 10/10 PASS covering full 9-phase pipeline, hash chain, cert VC 2.0 signing/verify, Neo4j lineage, ordering enforcement, blocker gating, least-privilege scopes, request-hash mismatch, reaudit reissue/revoke, monitoring-driven reaudit, event fabric delivery + dead-letter. Ran mcp-server vitest suite => 49/49 PASS (39 legacy + 10 governance). Additional MCP stdio spot checks: tools/list returns 28 tools with all 11 governance tools present; intake_register with only modelId is rejected at MCP layer (schema); classify_risk under intake-officer credentials is blocked by TS authz gate with 'NOT forwarded' message. Curl spot checks: bad-secret auth => 401; good auth returns JWT with role=governance-admin and 12 expected scopes including phase:*, reaudit:trigger, runs:read, certs:read; missing token => 401. Backend health endpoint reports postgres/neo4j/redis/certSigner all operational.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/tests/governance/test_governance_pipeline.py",
+    "/app/mcp-server/src/__tests__/governance.test.ts",
+    "/app/mcp-server/src/__tests__/index.test.ts",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (10/10 pytest + 49/49 vitest + all curl/MCP spot checks)", "frontend": "N/A (API/MCP-only system)"},
+  "test_credentials": "governance-admin/govern-admin-secret-dev; intake-officer/intake-officer-secret-dev (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None; tests generate unique modelIds per run",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Full E2E is covered by tests/governance/test_governance_pipeline.py; run with `GOVERNANCE_API_URL=http://localhost:8001 python -m pytest tests/governance -v`. MCP TS tests: `cd /app/mcp-server && npm test`. Do NOT test streamable-http MCP session (transport quirk); stdio is canonical. Backend uvicorn --reload only watches /app/backend; if orchestrator code is edited, run `sudo supervisorctl restart backend`.",
+  "rca of the issue": "N/A — all tests pass"
+}

@@ -1,0 +1,9 @@
+{
+  "name": "governance-preview-frontend-adapter",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Preview-environment adapter: serves the MCP server (Streamable HTTP) on port 3000 under the platform supervisor. Production entrypoint is mcp-server/dist/index.js.",
+  "scripts": {
+    "start": "MCP_TRANSPORT=streamable-http MCP_HTTP_HOST=0.0.0.0 PORT=3000 GOVERNANCE_API_URL=http://localhost:8001 PYTHON_BACKEND_URL=http://localhost:8000 node ../mcp-server/dist/index.js"
+  }
+}

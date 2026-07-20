@@ -3,6 +3,7 @@
 *.pyc
 .DS_Store
 .env
+.governance/
 .venv/
 __pycache__/
 dist/

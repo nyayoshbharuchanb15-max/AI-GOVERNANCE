@@ -368,6 +368,50 @@ We welcome contributions! See [CONTRIBUTING.md](./CONTRIBUTING.md) for guideline
 
 ---
 
+## Documentation index
+
+| Document | Contents |
+|---|---|
+| [ARCHITECTURE.md](./ARCHITECTURE.md) | **Source of truth** — 9-phase governance pipeline layering, component flow, Neo4j lineage schema (§4.1), Postgres JSONB evidence store (§4.2), phase state machine, VC 2.0 certification, reaudit pattern, security constraints |
+| [AUDIT_PIPELINE.md](./AUDIT_PIPELINE.md) | Exact tool contracts (inputs/outputs/regulatory triggers) for all 9 phases + reaudit impact matrix |
+| [GOVERNANCE_AND_COMPLIANCE.md](./GOVERNANCE_AND_COMPLIANCE.md) | Zero-egress policy, article-level regulatory coverage, least-privilege roles/scopes, deterministic gating, non-repudiation |
+| [schemas/w3c_audit_credential.jsonld](./schemas/w3c_audit_credential.jsonld) | W3C VC 2.0 JSON-LD context/shape for issued audit credentials (bundled, never fetched) |
+| [LEGAL-CITATION-AUDIT.md](./LEGAL-CITATION-AUDIT.md) | Mechanical fact-check of every legal citation against statute text |
+| [CONTRIBUTING.md](./CONTRIBUTING.md) | Contribution guidelines |
+
+## Governance Pipeline (9-Phase Orchestrated Certification Flow)
+
+In addition to the 17 standalone audit tools above, the repo ships the **AI Governance
+9-phase pipeline** — a dependency-gated certification flow orchestrated by the FastAPI
+service in `/orchestrator` (port 8010 in Docker Compose), with engines in `/engines`,
+lineage in `/graph` (Neo4j), evidence in `/store` (PostgreSQL JSONB), the event fabric in
+`/events` (Redis Streams, idempotent + dead-letter) and VC 2.0 issuance in `/certs`.
+
+| # | Phase | MCP tool | Route |
+|---|-------|----------|-------|
+| 1 | Intake & Context Registration | `intake_register` | `POST /api/v1/phases/intake` |
+| 2 | Regulatory Scope Mapping | `map_regulatory_scope` | `POST /api/v1/phases/scope` |
+| 3 | Risk Classification | `classify_risk` | `POST /api/v1/phases/risk` |
+| 4 | Data Protection & Privacy Checks | `check_data_protection` | `POST /api/v1/phases/data-protection` |
+| 5 | Fairness & Bias Evaluation | `evaluate_fairness` | `POST /api/v1/phases/fairness` |
+| 6 | Robustness, Security & Resilience | `test_robustness` | `POST /api/v1/phases/robustness` |
+| 7 | Explainability & Human Oversight | `verify_explainability` | `POST /api/v1/phases/explainability` |
+| 8 | Certification Assembly (VC 2.0) | `assemble_certification` | `POST /api/v1/phases/certification` |
+| 9 | Continuous Monitoring & Reaudit | `configure_monitoring` | `POST /api/v1/phases/monitoring` |
+| — | Reaudit (impact scope → selective re-run) | `trigger_reaudit` | `POST /api/v1/reaudit` |
+| — | Run status / hash chain | `get_audit_run` | `GET /api/v1/runs/{runId}` |
+
+Phase ordering is enforced by a deterministic state machine; a blocker finding in any phase
+halts the pipeline and prohibits certificate issuance. Certificates are W3C Verifiable
+Credentials 2.0 signed with Ed25519 (`DataIntegrityProof`/`eddsa-jcs-2022`) and verifiable
+offline via `GET /api/v1/certificates/{id}/verify`. End-to-end proof:
+
+```bash
+GOVERNANCE_API_URL=http://localhost:8010 pytest tests/governance -v
+```
+
+---
+
 ## Legal Citation Audit
 
 ComplianceStack includes a **full legal citation audit** verifying every regulatory claim in the codebase against the actual current text of each framework. This is not legal advice — it's a mechanical fact-check of code claims vs. statute text.
